@@ -1,0 +1,25 @@
+2022-10-20 20:07:31,491 seed: 0
+2022-10-20 20:07:31,492 exp: rn18_cifar10
+2022-10-20 20:07:31,492 if_logger: True
+2022-10-20 20:07:31,492 if_writer: False
+2022-10-20 20:07:31,493 load_model: state_dict
+2022-10-20 20:07:31,493 only_test: False
+2022-10-20 20:07:31,493 save: False
+2022-10-20 20:07:31,494 epoch: 100
+2022-10-20 20:07:31,494 grad_clip: -1
+2022-10-20 20:07:31,494 log_frequency: 250
+2022-10-20 20:07:31,494 model: Config([('name', 'ResNet18'), ('num_classes', 10)])
+2022-10-20 20:07:31,494 dataset: Config([('name', 'DatasetGenerator'), ('train_bs', 128), ('eval_bs', 128)])
+2022-10-20 20:07:31,495 criterion: Config([('name', 'CrossEntropyLoss')])
+2022-10-20 20:07:31,495 optimizer: Config([('name', 'SGD'), ('lr', 0.1), ('weight_decay', 0.0005), ('momentum', 0.9)])
+2022-10-20 20:07:31,495 scheduler: Config([('name', 'MultiStepLR'), ('milestones', [45, 75, 90]), ('gamma', 0.1)])
+2022-10-20 20:07:33,824 state_dict loaded from experiments\rn18_cifar10\state_dict\state_dict.pt
+2022-10-20 20:07:33,825 The best accuracy is 0
+2022-10-20 20:07:33,825 ====================Training Epoch 0====================
+2022-10-20 20:07:37,151 epoch=0 global_step=0 loss=0.2890 loss_avg=0.2890 lr=0.1000 |gn|=0.0000 acc=0.8906 acc_avg=0.8906 time=0.31it/s
+2022-10-20 20:08:10,745 epoch=0 global_step=250 loss=0.4109 loss_avg=0.3237 lr=0.1000 |gn|=0.0000 acc=0.8594 acc_avg=0.8900 time=9.03it/s
+2022-10-20 20:08:30,132 ====================Eval Epoch 0====================
+2022-10-20 20:08:33,729 [33mVal Loss: 0.70[0m
+2022-10-20 20:08:33,730 [33mVal Acc: 0.7855[0m
+2022-10-20 20:08:33,731 ====================Training Epoch 1====================
+2022-10-20 20:08:48,487 epoch=1 global_step=500 loss=0.3744 loss_avg=0.3229 lr=0.1000 |gn|=0.0000 acc=0.8906 acc_avg=0.8868 time=9.43it/s

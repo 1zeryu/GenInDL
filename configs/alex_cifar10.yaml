@@ -1,0 +1,27 @@
+epoch: 80
+grad_clip: -1
+log_frequency: 250
+
+model: 
+  name: AlexNet
+  num_classes: 10
+
+dataset:
+  name: DatasetGenerator
+  train_bs: 128
+  eval_bs: 128
+
+criterion:
+  name: CrossEntropyLoss
+
+optimizer:
+  name: SGD
+  lr: 0.1
+  weight_decay: 5.e-4
+  momentum: 0.9
+
+scheduler:
+  name: MultiStepLR
+  milestones: [25, 45, 70]
+  gamma: 0.1
+

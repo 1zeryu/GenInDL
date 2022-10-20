@@ -1,0 +1,16 @@
+2022-10-20 20:15:23,178 seed: 0
+2022-10-20 20:15:23,179 exp: alex_cifar10
+2022-10-20 20:15:23,179 if_logger: True
+2022-10-20 20:15:23,179 if_writer: True
+2022-10-20 20:15:23,180 load_model: None
+2022-10-20 20:15:23,180 only_test: False
+2022-10-20 20:15:23,180 save: False
+2022-10-20 20:15:23,180 epoch: 80
+2022-10-20 20:15:23,181 grad_clip: -1
+2022-10-20 20:15:23,181 log_frequency: 250
+2022-10-20 20:15:23,181 model: Config([('name', 'AlexNet'), ('num_classes', 10)])
+2022-10-20 20:15:23,181 dataset: Config([('name', 'DatasetGenerator'), ('train_bs', 128), ('eval_bs', 128)])
+2022-10-20 20:15:23,182 criterion: Config([('name', 'CrossEntropyLoss')])
+2022-10-20 20:15:23,182 optimizer: Config([('name', 'SGD'), ('lr', 0.1), ('weight_decay', 0.0005), ('momentum', 0.9)])
+2022-10-20 20:15:23,182 scheduler: Config([('name', 'MultiStepLR'), ('milestones', [25, 45, 70]), ('gamma', 0.1)])
+2022-10-20 20:15:26,536 ====================Training Epoch 0====================
