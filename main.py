@@ -37,6 +37,7 @@ parser.add_argument('--if_writer','-w', default=False, action='store_true')
 parser.add_argument('--load_model', default=None, type=str)
 parser.add_argument('--only_test', '-o', action='store_true', default=False)
 parser.add_argument('--save', '-s', action='store_true', default=False)
+parser.add_argument('--cam','-c', action='store_true', default=False)
 args = parser.parse_args()
 
 
