@@ -1,13 +1,25 @@
 from datetime import datetime 
 import logging
 import os
+from tokenize import Name
 import numpy as np
 import torch
 from scipy.spatial.distance import cdist
 from torch.utils.tensorboard import SummaryWriter
 import pdb
+from thop import profile
+import torch
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+def Params(model):
+    return sum([param.nelement() for param in model.parameters()])
+
+
+def FlopandParams(model):
+    input = torch.randn(1,3,32,32).to(device)
+    flops, params = profile(model, inputs=(input,))
+    return flops, params
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -147,3 +159,10 @@ class timer(object):
     def runtime(self):
         return '| Running time : %d:%02d:%02d'  %(self.get_hms(self.running_time))
 
+import matplotlib.pyplot as plt
+def show_image(activation_map, name=None):
+    plt.figure()
+    plt.imshow(activation_map)
+    plt.axis('off')
+    plt.title(name)
+    plt.tight_layout()

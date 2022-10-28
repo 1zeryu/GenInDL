@@ -1,9 +1,10 @@
 epoch: 80
 grad_clip: -1
-log_frequency: 250
+log_frequency: 50
+first_layer: features.0
 
 model: 
-  name: AlexNet
+  name: AlexNet 
   num_classes: 10
 
 dataset:
@@ -16,12 +17,10 @@ criterion:
 
 optimizer:
   name: SGD
-  lr: 0.1
+  lr: 0.008
   weight_decay: 5.e-4
   momentum: 0.9
 
 scheduler:
-  name: MultiStepLR
-  milestones: [10, 45, 70]
-  gamma: 0.1
-
+  name: ExponentialLR
+  gamma: 0.9

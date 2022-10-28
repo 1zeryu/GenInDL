@@ -6,9 +6,10 @@ from time import time
 from typing_extensions import Self
 from unicodedata import name
 import os
+import models
 import mlconfig
 import torch
-from utils.exp import build_dirs, setup_logger, setup_writer, timer
+from utils.exp import build_dirs, setup_logger, setup_writer, timer, FlopandParams
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -48,15 +49,22 @@ class ExperimentManager(object):
         # train
         self.epoch = config.epoch
         self.model = config.model().to(device)
+        
+        flops, params = FlopandParams(self.model)
+        self.info('Model Params: {:.2f} M'.format(params/1000000.0))
+        self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
+        
         self.optimizer = config.optimizer(self.model.parameters())
         self.scheduler = config.scheduler(self.optimizer)
         self.criterion = config.criterion()
         self.data = config.dataset()
+        self.classes = self.data.classes
         
         # parameters
         self.best_acc = 0
         self.grad_clip = config.grad_clip
         self.log_frequency = config.log_frequency 
+        self.first_layer = config.first_layer
         
     def write(self, name, data, epoch):
         if self.writer is not None:

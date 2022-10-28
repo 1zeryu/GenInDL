@@ -1,3 +1,4 @@
+from unittest import loader
 import torch
 from utils import AverageMeter, accuracy
 
@@ -45,3 +46,4 @@ class Evaluator():
         self.acc_meters.update(acc.item(), labels.shape[0])
         self.acc5_meters.update(acc5.item(), labels.shape[0])
         return loss
+    

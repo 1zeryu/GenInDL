@@ -1,11 +1,12 @@
 epoch: 80
 grad_clip: -1
 log_frequency: 250
+first_layer: features.0
 
 model: 
   name: VGG
   num_classes: 10
-  VGG_name: 'VGG11'
+  vgg_name: VGG11
 
 dataset:
   name: DatasetGenerator

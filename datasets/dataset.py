@@ -4,6 +4,8 @@ from .utils import transform_options, dataset_options
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+raw_transform = transforms.ToTensor()
+
 
 class DatasetGenerator():
     def __init__(self, train_bs=128, eval_bs=256, seed=0, n_workers=0,
@@ -45,7 +47,8 @@ class DatasetGenerator():
                                                      True, kwargs)
         self.train_set_length = len(self.train_set)
         self.test_set_length = len(self.test_set)
-        
+    
+        self.classes = self.train_set.classes
 
     def get_loader(self, train_shuffle=True):
         poison_test_loader = None
@@ -57,6 +60,7 @@ class DatasetGenerator():
         test_loader = DataLoader(dataset=self.test_set, pin_memory=True,
                                  batch_size=self.eval_bs, drop_last=False,
                                  num_workers=self.n_workers, shuffle=False)
+        
 
         if self.poison_test_set is not None:
             poison_test_loader = DataLoader(dataset=self.poison_test_set,
@@ -65,5 +69,5 @@ class DatasetGenerator():
                                             shuffle=False,
                                             num_workers=self.n_workers)
 
-        return train_loader, test_loader, poison_test_loader
+        return train_loader, test_loader
     

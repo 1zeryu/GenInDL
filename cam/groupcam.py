@@ -18,7 +18,6 @@ class GroupCAM(BaseCAM):
     def forward(self, x, class_idx=None, retain_graph=False):
         b, c, h, w = x.size()
         logit = self.model(x)
-        debug()
 
         if class_idx is None:
             predicted_class = logit.max(1)[-1]
@@ -62,7 +61,7 @@ class GroupCAM(BaseCAM):
             output = self.model(blur_x)
         output = F.softmax(output, dim=-1)
         score = output[:, predicted_class] - base_line.unsqueeze(0).repeat(self.groups, 1)
-        score = F.relu(score).unsqueeze(-1).unsqueeze(-1)
+        score = F.relu(score).unsqueeze(-1).unsqueeze(-1) 
         score_saliency_map = torch.sum(saliency_map * score, dim=0, keepdim=True)
 
         score_saliency_map_min, score_saliency_map_max = score_saliency_map.min(), score_saliency_map.max()
