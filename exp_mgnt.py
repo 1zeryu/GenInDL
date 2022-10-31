@@ -54,7 +54,7 @@ class ExperimentManager(object):
         self.info('Model Params: {:.2f} M'.format(params/1000000.0))
         self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
         
-        self.optimizer = config.optimizer(self.model.parameters())
+        self.optimizer = config.optimizer(filter(lambda p: p.requires_grad, self.model.parameters()))
         self.scheduler = config.scheduler(self.optimizer)
         self.criterion = config.criterion()
         self.data = config.dataset()
@@ -64,7 +64,7 @@ class ExperimentManager(object):
         self.best_acc = 0
         self.grad_clip = config.grad_clip
         self.log_frequency = config.log_frequency 
-        self.first_layer = config.first_layer
+        self.target_layer = config.target_layer
         
     def write(self, name, data, epoch):
         if self.writer is not None:

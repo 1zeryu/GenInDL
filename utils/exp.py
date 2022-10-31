@@ -17,7 +17,7 @@ def Params(model):
 
 
 def FlopandParams(model):
-    input = torch.randn(1,3,32,32).to(device)
+    input = torch.randn(1, 3, 32, 32).to(device)
     flops, params = profile(model, inputs=(input,))
     return flops, params
 

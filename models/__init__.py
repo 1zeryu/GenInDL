@@ -25,6 +25,7 @@ mlconfig.register(vgg.VGG)
 mlconfig.register(alexnet.AlexNet)
 mlconfig.register(wrn.RobustWideResNet)
 mlconfig.register(ViT.VisionTransformer)
+mlconfig.register(alexnet.AlexNet_fine_tuning)
 
 # torchvision models
 mlconfig.register(torchvision.models.resnet18)

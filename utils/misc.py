@@ -357,8 +357,8 @@ def show_cam(img, mask, title=None):
     # cam = heatmap + img.cpu()
     cam = 1 * (1 - mask ** 0.8) * img + (mask ** 0.8) * heatmap
     # cam = (cam - cam.min()) / (cam.max() - cam.min())
-    if title is not None:
-        vutils.save_image(cam, title)
+    # if title is not None:
+    #     vutils.save_image(cam, title)
 
     return cam
 

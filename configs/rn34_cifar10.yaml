@@ -1,10 +1,10 @@
 epoch: 100
 grad_clip: -1
 log_frequency: 250
-target_layer: layer4.1.conv2
+target_layer: layer4.2.conv2
 
 model: 
-  name: ResNet18
+  name: ResNet34
   num_classes: 10
 
 dataset:
@@ -17,7 +17,7 @@ criterion:
 
 optimizer:
   name: SGD
-  lr: 0.01
+  lr: 0.001
   weight_decay: 5.e-4
   momentum: 0.9
 

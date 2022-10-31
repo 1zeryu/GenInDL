@@ -63,7 +63,7 @@ class Trainer():
         loss.backward()
         if self.grad_clip != -1:
             grad_norm = clip_grad_norm_(model.parameters(),
-                                        self.config.grad_clip)
+                                        self.grad_clip)
         else:
             grad_norm = 0
         optimizer.step()
