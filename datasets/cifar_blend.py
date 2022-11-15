@@ -1,6 +1,5 @@
 import torch
 import numpy as np
-import pickle
 from tqdm import tqdm
 from torchvision import datasets, transforms
 from PIL import Image

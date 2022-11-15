@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from torchvision import transforms
-from torchvision.datasets import CIFAR10, CIFAR100, SVHN, MNIST, ImageNet
+from torchvision.datasets import CIFAR10, CIFAR100, SVHN, MNIST, ImageNet, STL10
 from torchvision.datasets.folder import ImageFolder
 from .cifar_noisy import cifar10Nosiy
 from .cifar_custom import CustomCIFAR10
@@ -18,6 +18,13 @@ transform_options = {
     "None": {
         "train_transform": None,
         "test_transform": None},
+    "STL10": {
+        'train_transform': [transforms.RandomCrop(96, padding=4),
+                             transforms.RandomHorizontalFlip(),
+                             transforms.RandomRotation(15),
+                             transforms.ToTensor()],
+        'test_transform': [transforms.ToTensor()],
+    },
     "NoAug": {
         "train_transform": [transforms.ToTensor()],
         "test_transform": [transforms.ToTensor()]},
@@ -65,6 +72,9 @@ transform_options = {
     }
 
 dataset_options = {
+    "STL10": lambda path, transform, is_test, kwargs:
+        STL10(root=path, split='test' if is_test else 'train', download=True,
+              transform=transform),
     "CIFAR10": lambda path, transform, is_test, kwargs:
         CIFAR10(root=path, train=not is_test, download=True,
                 transform=transform),

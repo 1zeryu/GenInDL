@@ -1,6 +1,6 @@
-epoch: 100
+epoch: 200
 grad_clip: -1
-log_frequency: 100
+log_frequency: 1
 target_layer: layer4.1.conv2
 
 model: 
@@ -11,16 +11,20 @@ dataset:
   name: DatasetGenerator
   train_bs: 256
   eval_bs: 256
+  train_d_type: "STL10"
+  test_d_type: "STL10"
+  train_tf_op: 'STL10'
+  test_tf_op: 'STL10'
   n_workers: 8
+
 
 criterion:
   name: CrossEntropyLoss
 
 optimizer:
-  name: SGD
+  name: Adam
   lr: 0.001
-  weight_decay: 4.e-4
-  momentum: 0.9
+  weight_decay: 5.e-4
 
 scheduler:
   name: ExponentialLR

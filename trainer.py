@@ -1,7 +1,7 @@
-from asyncio.log import logger
 import torch
 from utils import AverageMeter, log_display, accuracy
 from utils.exp import AverageMeter
+from torchvision.utils import save_image, make_grid 
 import time
 from torch.nn.utils import clip_grad_norm_
 
@@ -53,8 +53,6 @@ class Trainer():
     def train_batch(self, images, labels, model, optimizer):
         model.zero_grad()
         optimizer.zero_grad()
-        images = images.to(device)
-        labels = labels.to(device)
         if isinstance(self.criterion, torch.nn.CrossEntropyLoss):
             logits = model(images)
             loss = self.criterion(logits, labels)
@@ -81,5 +79,3 @@ class Trainer():
         payload['acc_avg'] = self.acc_meters.avg
 
         return payload
-
-            

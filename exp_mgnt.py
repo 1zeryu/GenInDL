@@ -1,10 +1,4 @@
-from cmath import exp
-from distutils.command.build import build
-from distutils.command.config import config
-from pyexpat import model
 from time import time
-from typing_extensions import Self
-from unicodedata import name
 import os
 import models
 import mlconfig
@@ -31,8 +25,6 @@ class ExperimentManager(object):
         build_dirs(self.exp_path)
         build_dirs(self.state_path)
         build_dirs(os.path.join(self.exp_path, log))
-        
-        
         self.logger = None
         self.writer = None
         if args.if_logger: 
@@ -42,17 +34,19 @@ class ExperimentManager(object):
                 self.logger.info("%s: %s" % (arg, getattr(args, arg)))
             for key in config:
                 self.logger.info("%s: %s" % (key, config[key]))
-        if args.if_writer:
+        if args.writer:
             writer_path = os.path.join(self.exp_path, runs)
+            writer_path = writer_path + '/' + args.exp + str(args.alpha)
             self.writer = setup_writer(writer_path)
         
         # train
+        self.alpha = args.alpha
         self.epoch = config.epoch
         self.model = config.model().to(device)
         
-        flops, params = FlopandParams(self.model)
-        self.info('Model Params: {:.2f} M'.format(params/1000000.0))
-        self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
+        # flops, params = FlopandParams(self.model)
+        # self.info('Model Params: {:.2f} M'.format(params/1000000.0))
+        # self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
         
         self.optimizer = config.optimizer(filter(lambda p: p.requires_grad, self.model.parameters()))
         self.scheduler = config.scheduler(self.optimizer)
@@ -79,16 +73,12 @@ class ExperimentManager(object):
         filename = os.path.join(self.state_path, name) + '.pt' 
         torch.save(state, filename)
         self.info('%s saved at %s' % (name, filename))
-        self.info('%s loaded from %s' % (name, filename))
-        return
+        return filename
     
     def load(self, name='state_dict'):
         path = os.path.join(self.state_path, name) + '.pt'
         state = torch.load(path)
-        self.model.load_state_dict(state['model'])
-        self.best_acc = state['best_acc']
         self.info('%s loaded from %s' % (name, path))
-        self.info("!!! The best accuracy is {} !!!".format(self.best_acc))
-        return 
+        return state
         
         

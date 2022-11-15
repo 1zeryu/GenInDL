@@ -3,9 +3,10 @@ import numpy as np
 from .utils import transform_options, dataset_options
 from torch.utils.data import DataLoader
 from torchvision import transforms
-
+from torch.utils.data import Dataset
+from torchvision.transforms.functional import normalize, resize, to_pil_image, to_tensor
 raw_transform = transforms.ToTensor()
-
+import torch
 
 class DatasetGenerator():
     def __init__(self, train_bs=128, eval_bs=256, seed=0, n_workers=0,
@@ -15,7 +16,7 @@ class DatasetGenerator():
                  **kwargs):
 
         np.random.seed(seed)
-
+        self.dataset = train_d_type
         if train_d_type not in dataset_options:
             print(train_d_type)
             raise('Unknown Dataset')
@@ -28,7 +29,7 @@ class DatasetGenerator():
         self.n_workers = n_workers
         self.train_path = train_path
         self.test_path = test_path
-
+        
         train_tf = transform_options[train_tf_op]["train_transform"]
         test_tf = transform_options[test_tf_op]["test_transform"]
         if train_tf is not None:
@@ -45,6 +46,7 @@ class DatasetGenerator():
                                                        False, kwargs)
         self.test_set = dataset_options[test_d_type](test_path, test_tf,
                                                      True, kwargs)
+        
         self.train_set_length = len(self.train_set)
         self.test_set_length = len(self.test_set)
     
@@ -70,4 +72,3 @@ class DatasetGenerator():
                                             num_workers=self.n_workers)
 
         return train_loader, test_loader
-    

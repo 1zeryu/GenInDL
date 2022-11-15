@@ -5,22 +5,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-def count_parameters_in_MB(model):
-    return sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary_head" not in name)/1e6
-
-def accuracy(output, target, topk=(1,)):
-    maxk = max(topk)
-
-    batch_size = target.size(0)
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].float().sum()
-        res.append(correct_k.mul_(1/batch_size))
-    return res
 
 # calculate local intrinsic dimension
 def track_latent_lid(model, loader, k=128):

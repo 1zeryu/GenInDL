@@ -47,6 +47,8 @@ def onehot(size, target):
     vec[target] = 1.
     return vec
 
+def count_parameters_in_MB(model):
+    return sum(np.prod(v.size()) for name, v in model.named_parameters() if "auxiliary_head" not in name)/1e6
 
 def rand_bbox(size, lam):
     if len(size) == 4:
@@ -166,3 +168,17 @@ def show_image(activation_map, name=None):
     plt.axis('off')
     plt.title(name)
     plt.tight_layout()
+    
+def accuracy(output, target, topk=(1,)):
+    maxk = max(topk)
+
+    batch_size = target.size(0)
+    _, pred = output.topk(maxk, 1, True, True)
+    pred = pred.t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    res = []
+    for k in topk:
+        correct_k = correct[:k].float().sum()
+        res.append(correct_k.mul_(1/batch_size))
+    return res

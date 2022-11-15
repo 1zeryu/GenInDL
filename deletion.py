@@ -1,37 +1,38 @@
-from concurrent.futures import process
-from email.mime import image
+import os
 from torchcam.utils import overlay_mask
 from matplotlib import cm
 from PIL import Image
 import numpy as np
 import torch
 from torchvision.transforms.functional import normalize, resize, to_pil_image, to_tensor
-from cam import *
 from utils.exp import debug
 import matplotlib.pyplot as plt
 import argparse
 from exp_mgnt import ExperimentManager
 from torchcam.methods import SmoothGradCAMpp
 from torchvision.io import read_image
-import datasets
-import cv2
+from datasets.cifar_de import DeletionDataset
 from torchvision.utils import make_grid, save_image
 from utils import AverageMeter, accuracy
-from utils.misc import show_cam, preprocess_img
+from tqdm import tqdm
+from torch.utils.data import DataLoader
 
-parser = argparse.ArgumentParser(description='Deletion Test')
+
+parser = argparse.ArgumentParser(description='deleiton')
 # Experiment Options
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--exp', type=str, default='rn18_cifar10')
 parser.add_argument('--if_logger', '-l', default=False, action='store_true')
 parser.add_argument('--load_model', default=None, type=str)
+parser.add_argument('--writer','-w', default=False, action='store_true')
 parser.add_argument('--alpha', type=float, default=0.02)
-parser.add_argument('--lower', '-o', default=False, action='store_true')
-parser.add_argument('--if_writer','-w', default=False, action='store_true')
+parser.add_argument('--cam','-c', default=False, action='store_true')
 parser.add_argument('--plot', '-p', default=False, action='store_true')
 parser.add_argument('--test', '-t', default=False, action='store_true')
 parser.add_argument('--random', '-r', default=False, action='store_true')
-
+parser.add_argument('--save', default=False, action='store_true')
+parser.add_argument('--only_test', '-o', default=False, action='store_true')
+parser.add_argument('--noise_type', type=str, default='deletion',)
 args = parser.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -39,165 +40,6 @@ if torch.cuda.is_available():
     torch.backends.cudnn.enabled = True 
     torch.backends.cudnn.benchmark = True 
 
-def saliency(img: Image.Image, mask: Image.Image, colormap: str = "jet", alpha: float = 0.7) -> Image.Image:
-    """Overlay a colormapped mask on a background image
-
-    >>> from PIL import Image
-    >>> import matplotlib.pyplot as plt
-    >>> from torchcam.utils import overlay_mask
-    >>> img = ...
-    >>> cam = ...
-    >>> overlay = overlay_mask(img, cam)
-
-    Args:
-        img: background image
-        mask: mask to be overlayed in grayscale
-        colormap: colormap to be applied on the mask
-        alpha: transparency of the background image
-
-    Returns:
-        overlayed image
-
-    Raises:
-        TypeError: when the arguments have invalid types
-        ValueError: when the alpha argument has an incorrect value
-    """
-
-    if not isinstance(img, Image.Image) or not isinstance(mask, Image.Image):
-        raise TypeError("img and mask arguments need to be PIL.Image")
-
-    if not isinstance(alpha, float) or alpha < 0 or alpha >= 1:
-        raise ValueError("alpha argument is expected to be of type float between 0 and 1")
-    # Resize mask and apply colormap
-    overlay = mask.resize(img.size, resample=Image.BICUBIC)
-    # Overlay the image with the mask
-
-    return np.asarray(overlay)
-
-def saliency_map(path, model, alpha, exp=None):
-    cam_extractor = SmoothGradCAMpp(model)
-    # Get your input
-    img = read_image(path).to(device)
-    # Preprocess it for your chosen model
-    input_tensor = normalize(resize(img, (224, 224)) / 255., [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    out = model(input_tensor.unsqueeze(0))
-    # Retrieve the CAM by passing the class index and the model output
-    activation_map = cam_extractor(out.squeeze(0).argmax().item(), out)
-    result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].squeeze(0), mode='F'), alpha=0.5)
-    # Display it
-    plt.imshow(result); plt.axis('off'); plt.tight_layout(); plt.show()
-    
-
-def saliency_maps(loader, model, alpha, exp=None):
-    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
-    for i, (images, targets) in enumerate(loader):
-        images = images.to(device)
-        targets = targets.to(device)
-        saliencys = []
-        for idx, data in enumerate(images):
-            out = model(data.unsqueeze(0))
-            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-            overlay = overlay_mask(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=0.5)
-            image_tensor = to_tensor(overlay)
-            saliencys.append(image_tensor)
-        if i < 10:
-            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(i+1))
-        else:
-            exit(0)
-
-def gaussian_maps(loader, model, alpha, exp=None):
-    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
-    for i, (images, targets) in enumerate(loader):
-        images = images.to(device)
-        targets = targets.to(device)
-        saliencys = []
-        for idx, data in enumerate(images):
-            out = model(data.unsqueeze(0))
-            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-            overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=alpha)
-            deletion_map = add_guassian_noise(data, overlay, alpha)
-            saliencys.append(deletion_map)
-        if i < 1:
-            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(str(alpha)))
-        else:
-            exit(0)
-            
-def deletion_maps(loader, model, alpha, exp=None):
-    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
-    for i, (images, targets) in enumerate(loader):
-        images = images.to(device)
-        targets = targets.to(device)
-        saliencys = []
-        for idx, data in enumerate(images):
-            out = model(data.unsqueeze(0))
-            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-            overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=alpha)
-            deletion_map = deletion(data, overlay, alpha)
-            saliencys.append(deletion_map)
-        if i < 1:
-            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(str(alpha)))
-        else:
-            exit(0)
-            
-            
-from utils import show_image
-def erase(image, overlay, threshold=0.5, alpha=0.2):
-    pil_image = (image * 255).permute(1,2,0)
-    overlay = torch.from_numpy(overlay)
-    threshold =  (overlay.max() - overlay.min()) * threshold + overlay.min()
-    mask = overlay > threshold
-    pil_image[mask] *= 1 - alpha 
-    return (pil_image.permute(2,0,1) / 255).unsqueeze(0), overlay     
-
-def deletion(image, mask, alpha=0.02):
-    process_img = image.clone()
-    finish = torch.zeros_like(image)
-    HW = mask.shape[0] * mask.shape[1]
-    
-    # erase the high saliency pixel
-    if not args.lower:
-        salient_order = np.flip(np.argsort(mask.reshape(-1, HW), axis=1), axis=-1)
-    else:
-        # erase the lower saliency pixel
-        salient_order = np.argsort(mask.reshape(-1, HW), axis=1)
-    
-    if args.random:
-        # random deletion
-        coords = np.random.randint(0, HW-1, int(HW * alpha), dtype=np.int64).reshape(1, -1)
-    else:
-        coords = salient_order[:, 0: int(HW * alpha)]
-    
-    process_img = process_img.cpu().numpy()
-    finish = finish.cpu().numpy()
-    process_img.reshape(1, 3, HW)[0, :, coords] = \
-        finish.reshape(1, 3, HW)[0, :, coords]
-    # debug()
-    return torch.tensor(process_img).to(device)
-
-def add_guassian_noise(image, mask, alpha=0.02):
-    process_img = image.clone()
-    noise = torch.randn_like(image)
-    HW = mask.shape[0] * mask.shape[1]
-    
-    # erase the high saliency pixel
-    salient_order = np.flip(np.argsort(mask.reshape(-1, HW), axis=1), axis=-1)
-    
-    # erase the lower saliency pixel
-    # salient_order = np.argsort(mask.reshape(-1, HW), axis=1)
-    
-    if args.random:
-        # random deletion
-        coords = np.random.randint(0, HW-1, int(HW * alpha), dtype=np.int64).reshape(1, -1)
-    else:
-        coords = salient_order[:, 0: int(HW * alpha)]
-    
-    process_img = process_img.cpu().numpy()
-    noise = noise.cpu().numpy()
-    process_img.reshape(1, 3, HW)[0, :, coords] += noise.reshape(1, 3, HW)[0, :, coords]
-    process_img = torch.clamp(torch.tensor(process_img).to(device), min=0.0, max=1.0)
-    # debug()
-    return process_img
-        
 class DeletedEvaluator():
     def __init__(self, criterion, loader, exp, model):
         self.cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
@@ -246,7 +88,7 @@ class DeletedEvaluator():
             out = model(data.unsqueeze(0))
             map = self.cam_extractor(class_idx=labels[idx].item(), scores=out)
             overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"))
-            erase_image = add_guassian_noise(data, overlay, alpha).unsqueeze(0)
+            erase_image = noise(data, overlay, alpha).unsqueeze(0)
             # save_image(make_grid([data, erase_image.squeeze(0)]), 'demos/out.jpg')
             # show_image(overlay, 'saliency')
             # plt.savefig('demos/saliency.jpg')
@@ -281,15 +123,169 @@ class DeletedEvaluator():
         self.erase_acc5_meters.update(erase_acc5.item(), labels.shape[0])
         self.logger.info('Erase acc: {}, Erase acc5: {}, Erase loss: {}'.format(erase_acc, erase_acc5, erase_loss))
         return erase_loss, loss
+        
+def MaskDatasetGenerator(trainloader, testloader, model, alpha, type, 
+                         exp=None, download=False, dataset='CIFAR10', train=True):
+    if download:
+        cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
+        train_data = []
+        test_data = []
+        train_labels = torch.tensor(trainloader.dataset.labels)
+        test_labels = torch.tensor(testloader.dataset.labels)
+
+        # processing the training images
+        for i, (images, targets) in tqdm(enumerate(trainloader), desc='train data'):   
+            images = images.to(device)
+            targets = targets.to(device)
+            for idx, data in enumerate(images):
+                out = model(data.unsqueeze(0))
+                map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
+                mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
+                process_img = noise(data, mask, type, alpha)
+                train_data.append(process_img)
+        train_data = torch.stack(train_data, dim=0)
+        assert train_data.shape[0] == train_labels.shape[0], "The training data size must be the same as the labels"
+        # processing the test images
+        for i, (images, targets) in tqdm(enumerate(testloader), desc='test data'):
+            images = images.to(device)
+            targets = targets.to(device)
+            for idx, data in enumerate(images):
+                out = model(data.unsqueeze(0))
+                map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
+                mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
+                process_img = noise(data, mask, type, alpha)
+                test_data.append(process_img)
+        test_data = torch.stack(test_data, dim=0)
+        assert test_data.shape[0] == test_labels.shape[0], "The test data size must be the same as the labels"
+        dataset = {
+            'train_data': train_data,
+            'train_labels': train_labels,
+            'test_data': test_data,
+            'test_labels': test_labels,
+            'num_classes': 10,
+        }
+        
+        filename = 'data' + type + 'alpha' + str(alpha)  
+        path = exp.save(dataset, filename)
+        print("The dataset is saved to {}, ending...".format(path))
+        exit(0)
+    
+    data = DeletionDataset(exp.state_path, alpha, type, train=train, dataset=dataset)
+    process_loader = DataLoader(dataset=data, pin_memory=True,
+                                  batch_size=trainloader.batch_size, drop_last=False,
+                                  num_workers=trainloader.num_workers,
+                                  shuffle=True)
+    return process_loader 
+    
+        
+def saliency(img: Image.Image, mask: Image.Image, colormap: str = "jet", alpha: float = 0.7) -> Image.Image:
+    if not isinstance(img, Image.Image) or not isinstance(mask, Image.Image):
+        raise TypeError("img and mask arguments need to be PIL.Image")
+
+    if not isinstance(alpha, float) or alpha < 0 or alpha >= 1:
+        raise ValueError("alpha argument is expected to be of type float between 0 and 1")
+    # Resize mask and apply colormap
+    overlay = mask.resize(img.size, resample=Image.BICUBIC)
+    # Overlay the image with the mask
+
+    return to_tensor(overlay).squeeze(0).to(device)
+
+def saliency_map(path, model, alpha, exp=None):
+    cam_extractor = SmoothGradCAMpp(model)
+    # Get your input
+    img = read_image(path).to(device)
+    # Preprocess it for your chosen model
+    input_tensor = normalize(resize(img, (224, 224)) / 255., [0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    out = model(input_tensor.unsqueeze(0))
+    # Retrieve the CAM by passing the class index and the model output
+    activation_map = cam_extractor(out.squeeze(0).argmax().item(), out)
+    result = overlay_mask(to_pil_image(img), to_pil_image(activation_map[0].squeeze(0), mode='F'), alpha=0.5)
+    # Display it
+    plt.imshow(result); plt.axis('off'); plt.tight_layout(); plt.show()
+    
+
+def saliency_maps(loader, model, alpha, exp=None):
+    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
+    for i, (images, targets) in enumerate(loader):
+        images = images.to(device)
+        targets = targets.to(device)
+        saliencys = []
+        for idx, data in enumerate(images):
+            out = model(data.unsqueeze(0))
+            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
+            overlay = overlay_mask(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=0.5)
+            image_tensor = to_tensor(overlay)
+            saliencys.append(image_tensor)
+        if i < 10:
+            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(i+1))
+        else:
+            exit(0)
+
+def gaussian_maps(loader, model, alpha, exp=None):
+    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
+    for i, (images, targets) in enumerate(loader):
+        images = images.to(device)
+        targets = targets.to(device)
+        saliencys = []
+        for idx, data in enumerate(images):
+            out = model(data.unsqueeze(0))
+            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
+            overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=alpha)
+            deletion_map = noise(data, overlay, alpha)
+            saliencys.append(deletion_map)
+        if i < 1:
+            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(str(alpha)))
+        else:
+            exit(0)
+            
+def deletion_maps(loader, model, alpha, exp=None):
+    cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
+    for i, (images, targets) in enumerate(loader):
+        images = images.to(device)
+        targets = targets.to(device)
+        saliencys = []
+        for idx, data in enumerate(images):
+            out = model(data.unsqueeze(0))
+            map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
+            overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"), alpha=alpha)
+            deletion_map = noise(data, overlay, alpha)
+            saliencys.append(deletion_map)
+        if i < 1:
+            save_image(make_grid(saliencys, nrow=16), 'demos/figure{}.jpg'.format(str(alpha)))
+        else:
+            exit(0)
+            
+            
+from utils import show_image
+def erase(image, overlay, threshold=0.5, alpha=0.2):
+    pil_image = (image * 255).permute(1,2,0)
+    overlay = torch.from_numpy(overlay)
+    threshold =  (overlay.max() - overlay.min()) * threshold + overlay.min()
+    mask = overlay > threshold
+    pil_image[mask] *= 1 - alpha 
+    return (pil_image.permute(2,0,1) / 255).unsqueeze(0), overlay     
+
+def noise(image, mask, type='deletion', alpha=0.02):
+    process_img = image.clone()
+    if type == 'deletion':
+        finish = torch.zeros_like(image).to(device)
+    else:
+        finish = torch.randn_like(image).to(device) / 4 + image
+        finish = torch.clamp(finish, min=0.0, max=1.0)
+    HW = mask.shape[0] * mask.shape[1]
+    # erase the high saliency pixel
+    salient_order = torch.flip(torch.argsort(mask.reshape(-1, HW), dim=1), dims=[1]).to(device)
+    coords = salient_order[:, 0: int(HW * alpha)]
+    process_img.reshape(1, 3, HW)[0, :, coords] = \
+        finish.reshape(1, 3, HW)[0, :, coords]
+    return process_img
+
        
 import warnings
 import random        
-import winsound
-
 if __name__ == "__main__":
     random.seed(args.seed)
     torch.manual_seed(args.seed)  
-    warnings.filterwarnings("ignore")
     warnings.warn('You have chosen to seed training. '
                       'This will turn on the CUDNN deterministic setting, '
                       'which can slow down your training considerably! '
@@ -316,5 +312,4 @@ if __name__ == "__main__":
         evaluator = DeletedEvaluator(criterion, eval_loader, exp, model)
         exp_stats = evaluator.eval(alpha=args.alpha, threshold=0.5)
         exp.info(exp_stats)
-    winsound.PlaySound("SystemHand", winsound.SND_ALIAS)
     

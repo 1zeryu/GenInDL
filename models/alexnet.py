@@ -1,5 +1,3 @@
-from ctypes import resize
-from turtle import forward
 import torch.nn as nn
 from torchvision.models import alexnet
 from torchvision.transforms import Resize
