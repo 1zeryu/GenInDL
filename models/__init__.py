@@ -2,7 +2,7 @@ import mlconfig
 import torch
 import torch.nn as nn
 import torchvision
-from . import DenseNet, ResNet, ToyModel, vgg, alexnet, wrn, ViT
+from . import DenseNet, ResNet, toy, vgg, alexnet, wrn, ViT
 
 mlconfig.register(torch.optim.SGD)
 mlconfig.register(torch.optim.Adam)
@@ -19,7 +19,7 @@ mlconfig.register(ResNet.ResNet34)
 mlconfig.register(ResNet.ResNet50)
 mlconfig.register(ResNet.ResNet101)
 mlconfig.register(ResNet.ResNet152)
-mlconfig.register(ToyModel.ToyModel)
+mlconfig.register(toy.ToyModel)
 mlconfig.register(DenseNet.DenseNet121)
 mlconfig.register(vgg.VGG)
 mlconfig.register(alexnet.AlexNet)

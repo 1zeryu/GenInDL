@@ -10,11 +10,7 @@ import torch
 from torchvision.io import read_image
 import random
 from torch.utils.tensorboard import SummaryWriter
-import torchcam.methods as cams
-from torchcam.utils import overlay_mask
-from torchvision.utils import make_grid, save_image
 import matplotlib.pyplot as plt
-
 if torch.cuda.is_available():
     # # Automatically find the best optimization algorithm for the current configuration
     torch.backends.cudnn.enabled = True 
@@ -37,7 +33,6 @@ parser.add_argument('--load_model', default=None, type=str)
 parser.add_argument('--only_test', '-o', action='store_true', default=False)
 parser.add_argument('--cam','-c', default=False, action='store_true')
 parser.add_argument('--alpha', type=float, default=0.02)
-parser.add_argument('--shuffle', '-s', action='store_true', default=False)
 parser.add_argument('--save', action='store_true', default=False)
 parser.add_argument('--noise_type', type=str, default='deletion',)
 args = parser.parse_args()

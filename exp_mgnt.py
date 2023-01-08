@@ -44,9 +44,9 @@ class ExperimentManager(object):
         self.epoch = config.epoch
         self.model = config.model().to(device)
         
-        # flops, params = FlopandParams(self.model)
-        # self.info('Model Params: {:.2f} M'.format(params/1000000.0))
-        # self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
+        flops, params = FlopandParams(self.model)
+        self.info('Model Params: {:.2f} M'.format(params/1000000.0))
+        self.info("FLOPs: {:.2f} M".format(flops/1000000.0))
         
         self.optimizer = config.optimizer(filter(lambda p: p.requires_grad, self.model.parameters()))
         self.scheduler = config.scheduler(self.optimizer)

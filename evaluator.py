@@ -1,7 +1,6 @@
 from unittest import loader
 import torch
 from utils import AverageMeter, accuracy
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class Evaluator():
@@ -32,10 +31,14 @@ class Evaluator():
         return exp_stats
 
     def eval_batch(self, images, labels, model):
+        images.requires_grad(True)
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         with torch.no_grad():
             if isinstance(self.criterion, torch.nn.CrossEntropyLoss):
+                # minishing 
+                # adv_images = self.adaptor(images, labels)   
+                # logits = model(adv_images)
                 logits = model(images)
                 loss = self.criterion(logits, labels)
             else:

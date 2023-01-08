@@ -4,7 +4,6 @@ from utils.exp import AverageMeter
 from torchvision.utils import save_image, make_grid 
 import time
 from torch.nn.utils import clip_grad_norm_
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 

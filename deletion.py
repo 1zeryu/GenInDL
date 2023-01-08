@@ -11,29 +11,12 @@ import argparse
 from exp_mgnt import ExperimentManager
 from torchcam.methods import SmoothGradCAMpp
 from torchvision.io import read_image
-from datasets.cifar_de import DeletionDataset
+from datasets.cifar_de import DeletionDataset, MaskCIFAR10
 from torchvision.utils import make_grid, save_image
 from utils import AverageMeter, accuracy
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-
-parser = argparse.ArgumentParser(description='deleiton')
-# Experiment Options
-parser.add_argument('--seed', type=int, default=0)
-parser.add_argument('--exp', type=str, default='rn18_cifar10')
-parser.add_argument('--if_logger', '-l', default=False, action='store_true')
-parser.add_argument('--load_model', default=None, type=str)
-parser.add_argument('--writer','-w', default=False, action='store_true')
-parser.add_argument('--alpha', type=float, default=0.02)
-parser.add_argument('--cam','-c', default=False, action='store_true')
-parser.add_argument('--plot', '-p', default=False, action='store_true')
-parser.add_argument('--test', '-t', default=False, action='store_true')
-parser.add_argument('--random', '-r', default=False, action='store_true')
-parser.add_argument('--save', default=False, action='store_true')
-parser.add_argument('--only_test', '-o', default=False, action='store_true')
-parser.add_argument('--noise_type', type=str, default='deletion',)
-args = parser.parse_args()
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 if torch.cuda.is_available():
@@ -85,7 +68,7 @@ class DeletedEvaluator():
         labels = labels.to(device, non_blocking=True)
         erase_images = None
         for idx, data in enumerate(images):
-            out = model(data.unsqueeze(0))
+            out = self.model(data.unsqueeze(0))
             map = self.cam_extractor(class_idx=labels[idx].item(), scores=out)
             overlay = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].squeeze(0), mode="F"))
             erase_image = noise(data, overlay, alpha).unsqueeze(0)
@@ -130,14 +113,15 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
         cam_extractor = SmoothGradCAMpp(model, target_layer=exp.target_layer)
         train_data = []
         test_data = []
-        train_labels = torch.tensor(trainloader.dataset.labels)
-        test_labels = torch.tensor(testloader.dataset.labels)
+        train_labels = torch.tensor(trainloader.dataset.targets)
+        test_labels = torch.tensor(testloader.dataset.targets)
 
         # processing the training images
         for i, (images, targets) in tqdm(enumerate(trainloader), desc='train data'):   
             images = images.to(device)
             targets = targets.to(device)
-            for idx, data in enumerate(images):
+            agency_images = images[torch.randperm(images.size(0))]
+            for image, data in zip(agency_images, images):
                 out = model(data.unsqueeze(0))
                 map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
                 mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
@@ -149,7 +133,8 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
         for i, (images, targets) in tqdm(enumerate(testloader), desc='test data'):
             images = images.to(device)
             targets = targets.to(device)
-            for idx, data in enumerate(images):
+            agency_images = images[torch.randperm(images.size(0))]
+            for image, data in zip(agency_images, images):
                 out = model(data.unsqueeze(0))
                 map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
                 mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
@@ -171,6 +156,7 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
         exit(0)
     
     data = DeletionDataset(exp.state_path, alpha, type, train=train, dataset=dataset)
+    # data = MaskCIFAR10(alpha)
     process_loader = DataLoader(dataset=data, pin_memory=True,
                                   batch_size=trainloader.batch_size, drop_last=False,
                                   num_workers=trainloader.num_workers,
@@ -267,49 +253,21 @@ def erase(image, overlay, threshold=0.5, alpha=0.2):
 
 def noise(image, mask, type='deletion', alpha=0.02):
     process_img = image.clone()
-    if type == 'deletion':
-        finish = torch.zeros_like(image).to(device)
-    else:
-        finish = torch.randn_like(image).to(device) / 4 + image
-        finish = torch.clamp(finish, min=0.0, max=1.0)
+    # if type == 'deletion' or type == 'retain':
+    finish = torch.zeros_like(image).to(device)
+    # elif type == 'gaussian':
+    #     finish = torch.randn_like(image).to(device) / 4 + image
+    #     finish = torch.clamp(finish, min=0.0, max=1.0)
     HW = mask.shape[0] * mask.shape[1]
     # erase the high saliency pixel
-    salient_order = torch.flip(torch.argsort(mask.reshape(-1, HW), dim=1), dims=[1]).to(device)
+    if type == 'deletion':
+        salient_order = torch.flip(torch.argsort(mask.reshape(-1, HW), dim=1), dims=[1]).to(device)
+    elif type == 'retain':
+        salient_order = torch.argsort(mask.reshape(-1, HW), dim=1).to(device)
+        alpha = 1 - alpha
+    elif type == 'gaussian':
+        salient_order = torch.randperm(HW).to(device).reshape(1, -1)
     coords = salient_order[:, 0: int(HW * alpha)]
     process_img.reshape(1, 3, HW)[0, :, coords] = \
         finish.reshape(1, 3, HW)[0, :, coords]
     return process_img
-
-       
-import warnings
-import random        
-if __name__ == "__main__":
-    random.seed(args.seed)
-    torch.manual_seed(args.seed)  
-    warnings.warn('You have chosen to seed training. '
-                      'This will turn on the CUDNN deterministic setting, '
-                      'which can slow down your training considerably! '
-                      'You may see unexpected behavior when restarting '
-                      'from checkpoints.')
-    exp = ExperimentManager(args)
-    if args.load_model is not None:
-        model = exp.load(args.load_model)
-    model = exp.model
-    optimizer = exp.optimizer
-    criterion = exp.criterion
-    data = exp.data
-    train_loader, eval_loader = data.get_loader()
-    scheduler = exp.scheduler
-    start_epoch = 0
-    best_acc = exp.best_acc
-    # saliency_map('demos\ILSVRC2012_val_00000073.JPEG', model, alpha=0.5, exp=exp)
-    # saliency_maps(eval_loader, model, alpha=0.5, exp=exp)
-    if args.plot: 
-        saliency_maps(eval_loader, model, alpha=args.alpha, exp=exp)
-        # gaussian_maps(eval_loader, model, alpha=args.alpha, exp=exp)
-    
-    if args.test:   
-        evaluator = DeletedEvaluator(criterion, eval_loader, exp, model)
-        exp_stats = evaluator.eval(alpha=args.alpha, threshold=0.5)
-        exp.info(exp_stats)
-    
