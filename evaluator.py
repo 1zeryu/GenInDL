@@ -36,9 +36,6 @@ class Evaluator():
         labels = labels.to(device, non_blocking=True)
         with torch.no_grad():
             if isinstance(self.criterion, torch.nn.CrossEntropyLoss):
-                # minishing 
-                # adv_images = self.adaptor(images, labels)   
-                # logits = model(adv_images)
                 logits = model(images)
                 loss = self.criterion(logits, labels)
             else:

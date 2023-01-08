@@ -42,6 +42,7 @@ class DatasetGenerator():
             self.poison_test_set = dataset_options[d_type](test_path, test_tf,
                                                            True, kwargs)
 
+        # using mask cifar 
         self.train_set = dataset_options[train_d_type](train_path, train_tf,
                                                        False, kwargs)
         self.test_set = dataset_options[test_d_type](test_path, test_tf,

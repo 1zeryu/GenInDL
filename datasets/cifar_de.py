@@ -3,7 +3,9 @@ import os
 from torchvision.transforms.functional import normalize, resize, to_pil_image, to_tensor
 from torch.utils.data import Dataset
 import torch
-from torchvision import transforms
+from typing import Any, Callable, Optional, Tuple
+from torchvision import transforms,datasets
+import random
 
 class DeletionDataset(Dataset):
     def __init__(self, root, alpha=0.1, type='deletion', dataset='CIFAR10', train: bool=True):
@@ -55,3 +57,25 @@ class DeletionDataset(Dataset):
 
     def __len__(self):
         return self.data.shape[0]
+    
+class MaskCIFAR10(datasets.CIFAR10):
+    def __init__(self, alpha: float = 0.1) -> None:
+        root = '../data'
+        train = True
+        target_transform = None
+        download = False
+        train_tf = transform_options['CIFAR10']['train_transform'] 
+        train_tf = transforms.Compose(train_tf)
+        super().__init__(root, train, train_tf, target_transform, download)
+        self.alpha = alpha
+    
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        img, target = super().__getitem__(index)
+        finish = torch.zeros_like(img)
+        HW = img.shape[1] * img.shape[2]
+        salient_order = torch.randperm(HW)
+        alpha = random.random()
+        coords = salient_order[0: int(HW * alpha)]
+        img.reshape(1, 3, HW)[0, :, coords] = \
+            finish.reshape(1, 3, HW)[0, :, coords]
+        return img, target

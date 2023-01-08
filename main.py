@@ -9,6 +9,7 @@ from utils import *
 import torch
 from torchvision.io import read_image
 import random
+import demo
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 if torch.cuda.is_available():
@@ -35,6 +36,7 @@ parser.add_argument('--cam','-c', default=False, action='store_true')
 parser.add_argument('--alpha', type=float, default=0.02)
 parser.add_argument('--save', action='store_true', default=False)
 parser.add_argument('--noise_type', type=str, default='deletion',)
+parser.add_argument('--demo', '-d', action='store_true', default=False)
 args = parser.parse_args()
 
 from deletion import MaskDatasetGenerator
@@ -77,35 +79,36 @@ def main():
         model.eval()
         exp_stats = evaluator.eval(model, exp_stats=exp_stats)
         exp.info(exp_stats)
-        exit(0)
-    
-    for epoch in range(start_epoch, epochs):
-        exp_stats = {} # is a directory containing ['lr', 'global_step', 'train_loss', 'train_acc', 'val_loss', 'val_acc']
-        exp.info("="*20 + "Training Epoch %d" % (epoch) + "="*20)
-        model.train()
-        exp_stats = trainer.train(epoch, model, optimizer, exp_stats=exp_stats)
-        scheduler.step()
-        exp.info("="*20 + "Eval Epoch %d" % (epoch) + "="*20)
-        model.eval()
-        exp_stats = evaluator.eval(model, exp_stats=exp_stats)
         
-        exp.write('acc/train', exp_stats['train_acc'], epoch)
-        exp.write('acc/eval', exp_stats['val_acc'], epoch)
-        exp.write('loss/train', exp_stats['train_loss'], epoch)
-        exp.write('loss/eval', exp_stats['val_loss'], epoch)
-        if exp_stats['val_acc'] > best_acc:
-            state = {
-                'model': model.state_dict(),
-                'best_acc': exp_stats['val_acc'],
-                'train_loss': exp_stats['val_loss'],
-                'eval_loss': exp_stats['val_loss'],
-                'train_acc': exp_stats['train_acc'],
-            }
-            path = exp.save(state, name = 'state_dict' + 'alpha' + str(args.alpha))
-            best_acc = exp_stats['val_acc']
-            exp.info('=' * 10 + 'The best accuracy is {}'.format(best_acc) + '=' * 10)
+    elif args.demo:
+        demo.GenerateMask()
+    
+    else:
+        for epoch in range(start_epoch, epochs):
+            exp_stats = {} # is a directory containing ['lr', 'global_step', 'train_loss', 'train_acc', 'val_loss', 'val_acc']
+            exp.info("="*20 + "Training Epoch %d" % (epoch) + "="*20)
+            model.train()
+            exp_stats = trainer.train(epoch, model, optimizer, exp_stats=exp_stats)
+            scheduler.step()
+            exp.info("="*20 + "Eval Epoch %d" % (epoch) + "="*20)
+            model.eval()
+            exp_stats = evaluator.eval(model, exp_stats=exp_stats)
             
-    return    
+            exp.write('acc/train', exp_stats['train_acc'], epoch)
+            exp.write('acc/eval', exp_stats['val_acc'], epoch)
+            exp.write('loss/train', exp_stats['train_loss'], epoch)
+            exp.write('loss/eval', exp_stats['val_loss'], epoch)
+            if exp_stats['val_acc'] > best_acc:
+                state = {
+                    'model': model.state_dict(),
+                    'best_acc': exp_stats['val_acc'],
+                    'train_loss': exp_stats['val_loss'],
+                    'eval_loss': exp_stats['val_loss'],
+                    'train_acc': exp_stats['train_acc'],
+                }
+                path = exp.save(state, name = 'state_dict' + 'alpha' + str(args.alpha))
+                best_acc = exp_stats['val_acc']
+                exp.info('=' * 10 + 'The best accuracy is {}'.format(best_acc) + '=' * 10)
 
 import warnings
 
