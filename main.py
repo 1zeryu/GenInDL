@@ -81,7 +81,8 @@ def main():
         exp.info(exp_stats)
         
     elif args.demo:
-        demo.GenerateMask()
+        print('Other Task...')
+        demo.GenerateMask(eval_loader, model)
     
     else:
         for epoch in range(start_epoch, epochs):
@@ -114,6 +115,7 @@ import warnings
 
 if __name__ == '__main__':
     random.seed(args.seed)
+    torch.backends.cudnn.deterministic = True
     torch.manual_seed(args.seed)
     warnings.warn('You have chosen to seed training. '
                       'This will turn on the CUDNN deterministic setting, '

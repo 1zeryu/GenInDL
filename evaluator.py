@@ -31,7 +31,6 @@ class Evaluator():
         return exp_stats
 
     def eval_batch(self, images, labels, model):
-        images.requires_grad(True)
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         with torch.no_grad():
