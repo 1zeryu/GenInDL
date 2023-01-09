@@ -9,7 +9,6 @@ from utils import *
 import torch
 from torchvision.io import read_image
 import random
-import demo
 from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 if torch.cuda.is_available():
@@ -39,7 +38,7 @@ parser.add_argument('--noise_type', type=str, default='deletion',)
 parser.add_argument('--demo', '-d', action='store_true', default=False)
 args = parser.parse_args()
 
-from deletion import MaskDatasetGenerator
+from mask import MaskDatasetGenerator
 
 def main():
     exp = ExperimentManager(args)
@@ -79,10 +78,6 @@ def main():
         model.eval()
         exp_stats = evaluator.eval(model, exp_stats=exp_stats)
         exp.info(exp_stats)
-        
-    elif args.demo:
-        print('Other Task...')
-        demo.GenerateMask(eval_loader, model)
     
     else:
         for epoch in range(start_epoch, epochs):
