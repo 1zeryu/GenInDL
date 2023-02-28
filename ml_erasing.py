@@ -53,6 +53,7 @@ def get_args_parser():
     
     # data erasing parameters
     parser.add_argument('erasing_ratio', type=float, default=0.02)
+    parser.add_argument('erasing_method', type=str, default='gaussian')
     args = parser.parse_args()
     return args
 
@@ -118,10 +119,10 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     assert dataset.shape[0] == 50000, "The dataset size must be error" # CIFAR dataset size
     return dataset
 
-def save_erasing_img(train_loader, eval_loader, model, erasing_ratio, erasing_method):
+def save_erasing_img(train_loader, eval_loader, model, args):
     # prepare the erasing tool and initialize the model
-    train_data = erasing(train_loader, model, erasing_method)
-    test_data = erasing(eval_loader, model, erasing_method)
+    train_data = erasing(train_loader, model, args.erasing_method)
+    test_data = erasing(eval_loader, model, args.erasing_method)
     train_labels = torch.tensor(train_loader.dataset.targets)
     test_labels = torch.tensor(eval_loader.dataset.targets)
     
@@ -129,7 +130,18 @@ def save_erasing_img(train_loader, eval_loader, model, erasing_ratio, erasing_me
     assert train_data.shape[0] == train_labels.shape[0], "The dataset size must be equal in train dataset"
     assert test_data.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
     
-    # save the process dataset 
+    dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
+    process_dataset = {
+        'train_data': train_data,
+        'train_labels': train_labels,
+        'test_data': test_data,
+        'test_labels': test_labels,
+        'num_classes': 10,
+    }
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    torch.save(process_dataset, file_path)
+    print('The dataset has been saved to {}'.format(file_path))
+    # save the process dataset successfully
 
 def ml_erasing(args):
     # initialize 
@@ -149,7 +161,8 @@ def ml_erasing(args):
     net = build_neural_network(args.arch)
     net.to(device)
     
-    
+    # process erasing
+    save_erasing_img(train_loader, eval_loader, net, args)
     
     
 
