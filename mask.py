@@ -4,11 +4,9 @@ from PIL import Image
 import numpy as np
 import torch
 from torchvision.transforms.functional import normalize, resize, to_pil_image, to_tensor
-from utils.exp import debug
 import matplotlib.pyplot as plt
 from torchcam.methods import SmoothGradCAMpp
 from datasets.cifar_de import DeletionDataset, MaskCIFAR10
-from utils import AverageMeter, accuracy
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
@@ -35,7 +33,10 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
             for image, data in zip(agency_images, images):
                 out = model(data.unsqueeze(0))
                 map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-                mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
+                mask = resize(map, (32, 32), antialias=True)
+                import pdb
+                pdb.set_trace()
+                # mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
                 process_img = noise(data, mask, type, alpha)
                 train_data.append(process_img)
         train_data = torch.stack(train_data, dim=0)
@@ -48,7 +49,8 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
             for image, data in zip(agency_images, images):
                 out = model(data.unsqueeze(0))
                 map = cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-                mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
+                mask = resize(map, (32, 32), antialias=True)
+                # mask = saliency(to_pil_image(data.cpu()), to_pil_image(map[0].cpu().squeeze(0), mode='F'), alpha=0.5)
                 process_img = noise(data, mask, type, alpha)
                 test_data.append(process_img)
         test_data = torch.stack(test_data, dim=0)
@@ -73,7 +75,7 @@ def MaskDatasetGenerator(trainloader, testloader, model, alpha, type,
                                   num_workers=trainloader.num_workers,
                                   shuffle=True)
     return process_loader 
-    
+
 def saliency(img: Image.Image, mask: Image.Image, colormap: str = "jet", alpha: float = 0.7) -> Image.Image:
     if not isinstance(img, Image.Image) or not isinstance(mask, Image.Image):
         raise TypeError("img and mask arguments need to be PIL.Image")

@@ -44,3 +44,16 @@ class VGG(nn.Module):
         layers += [nn.AvgPool2d(kernel_size=1, stride=1)]
         return nn.Sequential(*layers)
 
+def vgg11(num_classes=10):
+    return VGG('VGG11', num_classes=10)
+
+def vgg13(num_classes=10):
+    return VGG('VGG13', num_classes=10)
+
+def vgg16(num_classes=10):
+    return VGG('VGG16', num_classes=10)
+
+def vgg19(num_classes=10):
+    return VGG('VGG19', num_classes=10)
+
+
