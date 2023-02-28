@@ -8,7 +8,7 @@ from torchvision import transforms,datasets
 import random
 
 class DeletionDataset(Dataset):
-    def __init__(self, root, alpha=0.1, type='deletion', dataset='CIFAR10', train: bool=True):
+    def __init__(self, root, dataset='CIFAR10', train: bool=True):
         self.root = root
         self.train =train
         
@@ -27,14 +27,10 @@ class DeletionDataset(Dataset):
         else:
             self.transform = transforms.Compose(test_tf)
         
-        self.alpha = alpha 
-        filename = 'data' + type + 'alpha' + str(alpha) + '.pt'
+        assert os.path.exists(root), "There is no file named {}, so we can't find the dataset.".format(os.path.splitext(root))
         
-        path = os.path.join(root, filename)
-        assert os.path.exists(path), "There is no file named {}, so we can't find the dataset.".format(filename)
-        
-        entry = torch.load(path)
-        print('dataset loaded from {}'.format(path))
+        entry = torch.load(root)
+        print('dataset loaded from {}'.format(root))
         
         if train:
             self.data = entry['train_data'].cpu()

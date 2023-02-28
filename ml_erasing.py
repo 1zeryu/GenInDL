@@ -7,8 +7,10 @@ import torch
 import argparse
 from datasets.dataset import DatasetGenerator 
 from models import build_neural_network
+from datasets.cifar_de import DeletionDataset
 from torchcam.methods import GradCAM
 import tqdm
+from torch.utils.data import DataLoader
 from utils import *
 from torchvision.transforms import Resize
 
@@ -142,6 +144,14 @@ def save_erasing_img(train_loader, eval_loader, model, args):
     torch.save(process_dataset, file_path)
     print('The dataset has been saved to {}'.format(file_path))
     # save the process dataset successfully
+    
+def get_erasing_loader(args):
+    dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    data = DeletionDataset(file_path, train=True)
+    process_loader = DataLoader(dataset=data, batch_size=args.batch_size, drop_last=False,
+                                num_workers=args.n_workers, shuffle=True)
+    return process_loader
 
 def ml_erasing(args):
     # initialize 
@@ -163,7 +173,6 @@ def ml_erasing(args):
     
     # process erasing
     save_erasing_img(train_loader, eval_loader, net, args)
-    
     
 
 if __name__ == "__main__":
