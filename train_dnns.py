@@ -6,7 +6,6 @@ from utils import *
 from criterion import get_criterion
 from torchvision import transforms
 import numpy as np
-from noise import *
 import argparse
 from torch.nn.utils import clip_grad_norm_
 
