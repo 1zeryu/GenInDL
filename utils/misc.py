@@ -104,12 +104,13 @@ def save_model(name, net, optimizer, args=None):
         torch.save(state, path)
         print("Model saved to %s" % path)
 
-def load_model(name, net, optimizer):
+def load_model(name, net, optimizer=None):
     model_state_dict_path = os.path.join('experiments/state_dict', name + '.pt')
     if os.path.exists(model_state_dict_path):
         state = torch.load(model_state_dict_path)
         net.load_state_dict(state['model'])
-        optimizer.load_state_dict(state['optimizer'])
+        if optimizer: 
+            optimizer.load_state_dict(state['optimizer'])
         print("Model loaded")
         return 1
     else:

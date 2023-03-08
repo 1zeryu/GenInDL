@@ -9,10 +9,12 @@ from datasets.dataset import DatasetGenerator
 from models import build_neural_network
 from datasets.cifar_de import DeletionDataset
 from torchcam.methods import GradCAM
-import tqdm
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import *
 from torchvision.transforms import Resize
+
+import torch.utils.model_zoo as model_zoo
 
 def get_args_parser():
     # get the parameters from the terminal
@@ -54,8 +56,8 @@ def get_args_parser():
     parser.add_argument('--lr_scheduler', type=str, default='alpha_plan')
     
     # data erasing parameters
-    parser.add_argument('erasing_ratio', type=float, default=0.02)
-    parser.add_argument('erasing_method', type=str, default='gaussian')
+    parser.add_argument('--erasing_ratio', type=float, default=0.02)
+    parser.add_argument('--erasing_method', type=str, default='gaussian_erasing')
     args = parser.parse_args()
     return args
 
@@ -64,7 +66,7 @@ class Eraser(object):
         self.erasing_method = erasing_method
         self.erasing_ratio = erasing_ratio
         self.model = model
-        self.cam_extractor = GradCAM(self.model, target_layer=None)
+        # self.cam_extractor = GradCAM(self.model, target_layer=None)
         self.map_tool = Resize((32, 32), antialias=True)
     
     def gaussian(self, image):
@@ -110,21 +112,20 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
         desc (_type_, optional): tqdm description.
     """
     # set the eraser, i.e. cam_based extractor
-    eraser = Eraser(erasing_method, )
+    eraser = Eraser(erasing_method, erasing_ratio, model)
     process_dataset = []
     for i, (images, targets) in tqdm(enumerate(loader), desc=desc):
         images = images.to(device)
         targets = targets.to(device) 
         for image in images:
-            process_dataset.append(erasing_method(image, erasing_ratio))
+            process_dataset.append(eraser(image))
     dataset = torch.stack(process_dataset)
-    assert dataset.shape[0] == 50000, "The dataset size must be error" # CIFAR dataset size
     return dataset
 
 def save_erasing_img(train_loader, eval_loader, model, args):
     # prepare the erasing tool and initialize the model
-    train_data = erasing(train_loader, model, args.erasing_method)
-    test_data = erasing(eval_loader, model, args.erasing_method)
+    train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
+    test_data = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
     train_labels = torch.tensor(train_loader.dataset.targets)
     test_labels = torch.tensor(eval_loader.dataset.targets)
     
@@ -144,6 +145,7 @@ def save_erasing_img(train_loader, eval_loader, model, args):
     torch.save(process_dataset, file_path)
     print('The dataset has been saved to {}'.format(file_path))
     # save the process dataset successfully
+
     
 def get_erasing_loader(args):
     dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
@@ -156,7 +158,7 @@ def get_erasing_loader(args):
 def ml_erasing(args):
     # initialize 
     torch.manual_seed(args.seed)
-    np.ranodm.seed(args.seed)
+    np.random.seed(args.seed)
     
     if torch.cuda.is_available():
         # Automatically find the best optimization algorithm for the current configuration
@@ -165,10 +167,11 @@ def ml_erasing(args):
     
     # get the data loader
     data = DatasetGenerator(train_bs=args.batch_size, eval_bs=args.batch_size, n_workers=args.n_workers)
-    train_loader, eval_loader = data.get_loader()
+    train_loader, eval_loader = data.get_loader(train_shuffle=False)
     
     # building the network
     net = build_neural_network(args.arch)
+    load_model(args.load, net)
     net.to(device)
     
     # process erasing
