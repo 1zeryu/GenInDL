@@ -9,7 +9,9 @@ from torchvision.transforms.functional import normalize, resize, to_pil_image, t
 from models import *
 import argparse
 from utils import *
-from torchcam.methods import GradCAM 
+from torchcam.methods import SmoothGradCAMpp
+from torchcam.utils import overlay_mask
+from criterion import *
 import pdb
 
 def get_args_parser():
@@ -51,6 +53,10 @@ def get_args_parser():
     # learning rate schedule parameters
     parser.add_argument('--lr_scheduler', type=str, default='alpha_plan')
     
+    # data erasing parameters
+    parser.add_argument('--erasing_ratio', type=float, default=0.02)
+    parser.add_argument('--erasing_method', type=str, default='gaussian_erasing')
+    
     args = parser.parse_args()
     return args
 
@@ -59,11 +65,38 @@ def get_erasing_loader(args, train=True):
     file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
     data = DeletionDataset(file_path, train=train)
     process_loader = DataLoader(dataset=data, batch_size=args.batch_size, drop_last=False,
-                                num_workers=args.n_workers, shuffle=True)
+                                num_workers=args.n_workers, shuffle=False)
     return process_loader
 
 def get_cam_map(image, extractor):
     pass
+
+def save_image(image, name):
+    path = os.path.join('images', name)
+    image.save(path, format='PNG')
+    print("Image saved to {}".format(path))
+    
+
+def evaluate(net, criterion, eval_loader, args):
+    # metrics 
+    acc_meter = AverageMeter()
+    acc5_meter = AverageMeter()
+    loss_meter = AverageMeter()
+    
+    net.eval()
+    for i, (images, labels) in enumerate(eval_loader):
+        images = images.to(device)
+        labels = labels.to(device)
+        
+        logits = net(images)
+        loss = criterion(logits, labels)
+        
+        acc, acc5 = accuracy(logits, labels, topk=(1,5))
+        acc_meter.update(acc)
+        acc5_meter.update(acc5)
+        loss_meter.update(loss.item())
+        
+    return acc_meter.avg, acc5_meter.avg, loss_meter.avg
 
 def visualize(args):
     # initialize 
@@ -85,30 +118,43 @@ def visualize(args):
     net.to(device)
     print(net)
     
-    cam_extractor = GradCAM(model=net, target_layer='layer4.0.conv2')
-    process_loader = get_erasing_loader(args, train=True)
+    # get the criterion function
+    criterion = get_criterion(args.criterion)
+    acc_meter, acc5_meter, loss_meter = evaluate(net, criterion, eval_loader, args)
+    print(acc_meter, acc5_meter, loss_meter)
     
-    erase_image = process_loader.next()[0]
-    origin_image = train_loader.next()[0]
+    cam_extractor = SmoothGradCAMpp(model=net, target_layer='layer4.1.conv1', )
+    process_loader = get_erasing_loader(args, train=False)
     
     # get the images
-    origin_image, origin_label = next(iter(train_loader))
+    origin_image, origin_label = next(iter(eval_loader))
     erased_image, erased_label = next(iter(process_loader))
+    
+    origin_image = origin_image.cuda()
+    origin_label = origin_label.cuda()
+    erased_image = erased_image.cuda()
+    erased_label = erased_label.cuda()
     
     # get the logits
     origin = net(origin_image[0].unsqueeze(0))
     erased = net(erased_image[0].unsqueeze(0))
     
     # calculate the cam score of each pixel
-    origin_map = cam_extractor(class_idx=origin_label[0].item(), scores=origin)
-    erased_map = cam_extractor(class_idx=erased_label[0].item(), scores=erased)
+    origin_map = cam_extractor(class_idx=origin_label[0].item(), scores=origin)[0]
+    erased_map = cam_extractor(class_idx=erased_label[0].item(), scores=erased)[0]
+
+    # resize_transform = transforms.Resize((64 ,64), interpolation=transforms.InterpolationMode.BILINEAR)
     
-    origin_mask = resize(origin_map, (32, 32), antialias=True)
-    erased_mask = resize(erased_map, (32, 32), antialias=True)
+    # origin_mask = resize_transform(origin_map)
+    # erased_mask = resize_transform(erased_map)
+    
+    origin_score_map = overlay_mask(to_pil_image(origin_image[0]), to_pil_image(origin_map),)
+    erased_score_map = overlay_mask(to_pil_image(erased_image[0]), to_pil_image(erased_map))
     
     pdb.set_trace()
-        
     
+    save_image(origin_score_map, 'origin.png')
+    save_image(erased_score_map, 'erased.png')
     
 
 if __name__ == "__main__":

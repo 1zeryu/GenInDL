@@ -175,8 +175,7 @@ def ml_erasing(args):
     net.to(device)
     
     # process erasing
-    save_erasing_img(train_loader, eval_loader, net, args)
-    
+    save_erasing_img(train_loader, eval_loader, net, args)    
 
 if __name__ == "__main__":
     args = get_args_parser()
