@@ -8,11 +8,12 @@ import argparse
 from datasets.dataset import DatasetGenerator 
 from models import build_neural_network
 from datasets.cifar_de import DeletionDataset
+from torchvision.datasets import CIFAR10
 from torchcam.methods import GradCAM
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import *
-from torchvision.transforms import Resize
+from torchvision.transforms import Resize, ToTensor, Compose
 
 import torch.utils.model_zoo as model_zoo
 
@@ -166,8 +167,17 @@ def ml_erasing(args):
         torch.backends.cudnn.benchmark = True 
     
     # get the data loader
-    data = DatasetGenerator(train_bs=args.batch_size, eval_bs=args.batch_size, n_workers=args.n_workers)
-    train_loader, eval_loader = data.get_loader(train_shuffle=False)
+    train_data = CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]))
+    eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
+    
+    train_loader = DataLoader(dataset=train_data, pin_memory=True,
+                                  batch_size=args.batch_size, drop_last=False,
+                                  num_workers=args.n_workers,
+                                  shuffle=False)
+
+    eval_loader = DataLoader(dataset=eval_data, pin_memory=True,
+                                batch_size=args.batch_size, drop_last=False,
+                                num_workers=args.n_workers, shuffle=False)
     
     # building the network
     net = build_neural_network(args.arch)
