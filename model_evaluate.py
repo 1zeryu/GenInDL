@@ -25,6 +25,10 @@ def get_args_parser():
     parser.add_argument('--batch_size', type=int, default=256, help='batch size for data loading')
     parser.add_argument('--n_workers', type=int, default=4, help='number of workers of dataloader')
     
+    # noise parameters
+    parser.add_argument("--erasing_method", type=str, default='gaussian_erasing')
+    parser.add_argument('--erasing_ratio', type=float, default=0.05)
+    
     # return the parameters for the py
     args = parser.parse_args()
     return args
@@ -43,7 +47,7 @@ def get_data(args):
         file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
         train_data = DeletionDataset(file_path, train=True)
         eval_data = DeletionDataset(file_path, train=False)
-        print("Using Gaussian noise datset from {}".format(file_path)))
+        print("Using Gaussian noise datset from {}".format(file_path))
         
     return train_data, eval_data
 
