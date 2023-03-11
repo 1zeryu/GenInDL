@@ -8,7 +8,7 @@ from torchvision import transforms,datasets
 import random
 
 class DeletionDataset(Dataset):
-    def __init__(self, root, dataset='CIFAR10', train: bool=True):
+    def __init__(self, root, dataset='CIFAR10', train: bool=True, feature_extractor=None):
         self.root = root
         self.train =train
         
@@ -18,14 +18,7 @@ class DeletionDataset(Dataset):
         elif dataset not in transform_options:
             print(dataset)
             raise('Unknown Dataset')
-        
-        train_tf = transform_options[dataset]['train_transform']
-        test_tf = transform_options[dataset]['test_transform']
-        
-        if train:
-            self.transform = transforms.Compose(train_tf)
-        else:
-            self.transform = transforms.Compose(test_tf)
+        self.feature_extractor = feature_extractor
         
         assert os.path.exists(root), "There is no file named {}, so we can't find the dataset.".format(os.path.splitext(root))
         
@@ -34,20 +27,22 @@ class DeletionDataset(Dataset):
         
         if train:
             self.data = entry['train_data'].cpu()
-            self.target = entry['train_labels'].cpu()
+            self.targets = entry['train_labels'].cpu()
         else:
             self.data = entry['test_data'].cpu()
-            self.target = entry['test_labels'].cpu()
+            self.targets = entry['test_labels'].cpu()
             
         self.num_classes = entry['num_classes']
     
     def __getitem__(self, index: int) :
         # import pdb
         # pdb.set_trace()
-        img, target = self.data[index], self.target[index]
+        img, target = self.data[index], self.targets[index]
         img = to_pil_image(img)
-        if self.transform is not None:
-            img = self.transform(img)
+        if self.feature_extractor:
+            img = self.feature_extractor()['pixel_values']
+        else:
+            img = to_tensor(img)
         
         return img, target
 

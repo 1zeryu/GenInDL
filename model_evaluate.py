@@ -12,6 +12,8 @@ from torchvision.datasets import CIFAR10
 from torch.utils.data import DataLoader
 from datasets.cifar_de import DeletionDataset
 import pdb
+from tqdm import tqdm
+import gc
 
 def get_args_parser():
     parser = argparse.ArgumentParser(description="Model Evaluations")
@@ -22,7 +24,7 @@ def get_args_parser():
     
     # data parameters
     parser.add_argument('--noise', type=str, default='normal', help='normal or gaussian ')
-    parser.add_argument('--batch_size', type=int, default=256, help='batch size for data loading')
+    parser.add_argument('--batch_size', type=int, default=128, help='batch size for data loading')
     parser.add_argument('--n_workers', type=int, default=4, help='number of workers of dataloader')
     
     # noise parameters
@@ -37,16 +39,17 @@ classes = ("airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "hors
 
 
 def get_data(args):
+    feature_extractor = ViTFeatureExtractor.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
     if args.noise == 'normal':
         print("Normal dataset")
-        train_data = CIFAR10(root='../data', train=True, download=True, transform=None)
-        eval_data = CIFAR10(root='../data', train=False, download=True, transform=None)
+        train_data = CIFAR10(root='../data', train=True, download=True, transform=feature_extractor)
+        eval_data = CIFAR10(root='../data', train=False, download=True, transform=feature_extractor)
     
     elif args.noise == 'gaussian':
         dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
         file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
-        train_data = DeletionDataset(file_path, train=True)
-        eval_data = DeletionDataset(file_path, train=False)
+        train_data = DeletionDataset(file_path, train=True, transform_or_not=feature_extractor)
+        eval_data = DeletionDataset(file_path, train=False, transform_or_not=feature_extractor)
         print("Using Gaussian noise datset from {}".format(file_path))
         
     return train_data, eval_data
@@ -102,52 +105,66 @@ def adversarial_evaluate(args):
             test: @acc: {:.3f}, @acc5: {:.3f}, @loss: {:.3f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
 
 
+def vit_evaluate_one_loader(loader, model, criterion):
+    acc_meter = AverageMeter()
+    acc5_meter = AverageMeter()
+    loss_meter = AverageMeter()
+    
+    torch.no_grad()
+    for i, (inputs, labels) in enumerate(loader):
+        inputs = inputs.cuda()
+        labels = labels.cuda()
+        outputs = model(inputs)['logits']
+        acc, acc5 = accuracy(outputs, labels, topk=(1,5))
+        loss = criterion(outputs, labels)
+        gc.collect()
+        torch.cuda.empty_cache()
+        acc_meter.update(acc)
+        acc5_meter.update(acc5)
+        loss_meter.update(loss)
+        if i % 20 == 0:
+            print("Accuracy: acc: {}, acc5: {}, loss{}".format(acc_meter.avg, acc5_meter.avg, loss_meter.avg))
+    
+    return acc_meter.avg, acc5_meter.avg, loss_meter.avgather
 
 def vit_evaluate(args):
     train_data, eval_data = get_data(args)
     
+    train_loader = DataLoader(dataset=train_data, pin_memory=True,
+                                  batch_size=args.batch_size, drop_last=False,
+                                  num_workers=args.n_workers,
+                                  shuffle=False)
+    eval_loader = DataLoader(dataset=eval_data, pin_memory=True,
+                                  batch_size=args.batch_size, drop_last=False,
+                                  num_workers=args.n_workers,
+                                  shuffle=False)
+    
     feature_extractor = ViTFeatureExtractor.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
-    model = ViTForImageClassification.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
     print("ViT evaluation ")
     
     criterion = get_criterion(loss_func='crossentropyloss')
     
-    train_size = train_data.size()
-    
-    preds = []
-    
+    model = ViTForImageClassification.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
+    model = model.to(device)
     print("Train evaluate")
-    for i in range(train_size):
-        image, target = train_data[i]
-        inputs = feature_extractor(images=image, return_tensors='pt')
-        outputs = model(**inputs)
-        pred = outputs.logits.argmax(dim=1)
-        
-    test_size = eval_data.size()
+    train_acc, train_acc5, train_loss = vit_evaluate_one_loader(train_loader, model, criterion)
     
-    print("test evaluate")
-    for i in range(test_size):
-        image, target = eval_data[i]
-        inputs = feature_extractor(images=image, return_tensors='pt')
-        outputs = model(**inputs)
-        pred = outputs.logits.argmax(dim=1)
-
+    print("Test evaluate")
+    test_acc, test_acc5, test_loss = vit_evaluate_one_loader(eval_loader, model, criterion)
+    
+    print("""Evaluate Results: 
+          train_acc: {}, train_acc5: {}, train_loss: {}, 
+          test_acc: {}, test_acc5: {}, test_loss: {}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
 
 def model_evaluation(args):
     # set the seed 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     
-    # get the dataset 
-    
-    
     # evaluated model
-    train_acc, train_acc5, train_loss = vit_evaluate()
-    test_acc, test_acc5, test_loss = vit_evaluate()
+    vit_evaluate(args)
     
-    print("""Evaluate Results: 
-          train_acc: {}, train_acc5: {}, train_loss: {}, 
-          test_acc: {}, test_acc5: {}, test_loss: {}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
+    
     
     
 
