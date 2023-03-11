@@ -14,6 +14,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import *
 from torchvision.transforms import Resize, ToTensor, Compose
+from torchvision.transforms.functional import to_pil_image
 
 import torch.utils.model_zoo as model_zoo
 

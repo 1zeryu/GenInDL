@@ -40,7 +40,7 @@ class DeletionDataset(Dataset):
         img, target = self.data[index], self.targets[index]
         img = to_pil_image(img)
         if self.feature_extractor:
-            img = self.feature_extractor()['pixel_values']
+            img = self.feature_extractor(img)['pixel_values'][0]
         else:
             img = to_tensor(img)
         
