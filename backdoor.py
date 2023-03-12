@@ -76,7 +76,7 @@ def create_backdoor_data():
         'debug': config.debug,
     }
     
-    backdoor_data_path = os.path.join('experiments/process_dataset', 'sin_deleta{}_f{}.npy'.format(config.delta, config.f))
+    backdoor_data_path = os.path.join('experiments/process_dataset', 'sin_delta{}_f{}.npy'.format(config.delta, config.f))
     np.save(backdoor_data_path, poison_data_sample)
 
 if __name__ == "__main__" :
