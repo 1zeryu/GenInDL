@@ -15,7 +15,7 @@ import pdb
 from models import *
 from tqdm import tqdm
 import gc
-from robustbench.utils import load_model
+import robustbench
 
 def get_args_parser():
     parser = argparse.ArgumentParser(description="Model Evaluations")
@@ -81,7 +81,12 @@ def evaluate(loader, net, args):
 
 def robust_common_corruption_evaluate(args):
     # load the model
-    model = load_model(model_name='Carmon2019Unlabeled', dataset='cifar10', threat_model='Linf')
+    model_name= 'Kireev2021Effectiveness_RLATAugMix'
+    state_dict_path = os.path.join('experiments/model_state_dict/', model_name + '.pt')
+    model = build_neural_network('Kireev2021EffectivenessNet')
+    state = torch.load(state_dict_path)['best']
+    model.load_state_dict(state, strict=False)
+    model = model.to(device)
     
     # data
     train_data, eval_data = get_data(args)
@@ -99,8 +104,8 @@ def robust_common_corruption_evaluate(args):
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
     print("""Experimental Result: 
-            train: @acc: {:.3f}, @acc5: {:.3f}, @loss: {:.3f}
-            test: @acc: {:.3f}, @acc5: {:.3f}, @loss: {:.3f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
+            train: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}
+            test: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
     
 
 
@@ -133,8 +138,8 @@ def adversarial_evaluate(args):
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
     print("""ER: 
-            train: @acc: {:.3f}, @acc5: {:.3f}, @loss: {:.3f}
-            test: @acc: {:.3f}, @acc5: {:.3f}, @loss: {:.3f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
+            train: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}
+            test: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
 
 
 def vit_evaluate_one_loader(loader, model, criterion):
@@ -195,7 +200,7 @@ def model_evaluation(args):
     np.random.seed(args.seed)
     
     # evaluated model
-    adversarial_evaluate(args)
+    robust_common_corruption_evaluate(args)
     
     
     
