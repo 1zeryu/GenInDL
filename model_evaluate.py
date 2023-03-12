@@ -1,7 +1,7 @@
 import torch
 import argparse
 from datasets.dataset import DatasetGenerator
-from transformers import ViTFeatureExtractor, ViTForImageClassification, AutoModelForImageClassification
+from transformers import ViTFeatureExtractor, ViTForImageClassification, AutoModelForImageClassification, AutoFeatureExtractor
 from PIL import Image
 from criterion import get_criterion
 import numpy as np
@@ -16,6 +16,7 @@ from models import *
 from tqdm import tqdm
 import gc
 import robustbench
+import timm
 
 def get_args_parser():
     parser = argparse.ArgumentParser(description="Model Evaluations")
@@ -39,19 +40,42 @@ def get_args_parser():
 
 classes = ("airplane", "automobile", "bird", "cat", "deer", "dog", "frog", "horse", "ship", "truck")
 
+class Dataset_backdoor(torch.utils.Dataset):
+    def __init__(self, root, transform=None, train=True):
+        state = torch.load(root)
+        self.train = train
+        self.transform = transform
+        if self.train:
+            self.data = state['train_data']
+            self.labels = state['train_labels']
+        else:
+            self.data = state['eval_data']
+            self.labels = state['eval_labels']
+        self.delta = state['delta']
+        self.f = state['f']
+        self.debug = state['debug']
+    
+    def __getitem__(self, index):
+        img, target = self.data[index], self.labels[index]
+        img = Image.fromarray(img)
+        if self.transform:
+            img = self.transform(img)
+        return img, target
+        
 
 def get_data(args):
     feature_extractor = ViTFeatureExtractor.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
+    totensor = transforms.Compose([transforms.ToTensor()])
     if args.noise == 'normal':
         print("Normal dataset")
-        train_data = CIFAR10(root='../data', train=True, download=True, transform=transforms.Compose([transforms.ToTensor()]))
-        eval_data = CIFAR10(root='../data', train=False, download=True, transform=transforms.Compose([transforms.ToTensor()]))
+        train_data = CIFAR10(root='../data', train=True, download=True, transform=feature_extractor)
+        eval_data = CIFAR10(root='../data', train=False, download=True, transform=feature_extractor)
     
     elif args.noise == 'gaussian':
         dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
         file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
-        train_data = DeletionDataset(file_path, train=True, )
-        eval_data = DeletionDataset(file_path, train=False, )
+        train_data = DeletionDataset(file_path, train=True, feature_extractor=feature_extractor)
+        eval_data = DeletionDataset(file_path, train=False, feature_extractor=feature_extractor)
         print("Using Gaussian noise datset from {}".format(file_path))
         
     return train_data, eval_data
@@ -177,12 +201,12 @@ def vit_evaluate(args):
                                   num_workers=args.n_workers,
                                   shuffle=False)
     
-    feature_extractor = ViTFeatureExtractor.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
+    extractor = AutoFeatureExtractor.from_pretrained("aaraki/vit-base-patch16-224-in21k-finetuned-cifar10")
     print("ViT evaluation ")
     
     criterion = get_criterion(loss_func='crossentropyloss')
     
-    model = ViTForImageClassification.from_pretrained('nateraw/vit-base-patch16-224-cifar10')
+    model = AutoModelForImageClassification.from_pretrained("aaraki/vit-base-patch16-224-in21k-finetuned-cifar10")
     model = model.to(device)
     print("Train evaluate")
     train_acc, train_acc5, train_loss = vit_evaluate_one_loader(train_loader, model, criterion)
@@ -201,10 +225,6 @@ def model_evaluation(args):
     
     # evaluated model
     robust_common_corruption_evaluate(args)
-    
-    
-    
-    
 
 if __name__ == "__main__":
     args = get_args_parser()
