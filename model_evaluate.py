@@ -166,8 +166,9 @@ class MYCIFAR10(VisionDataset):
 
         if self.transform is not None:
             img = self.transform(img)
+            
             # pdb.set_trace()
-            if not isinstance(img, np.ndarray):
+            if not isinstance(img, torch.Tensor):
                 img = img['pixel_values'][0]
 
         if self.target_transform is not None:
@@ -282,13 +283,24 @@ def sin_evaluate(args):
 
 def robust_common_corruption_evaluate(args):
     # load the model
-    model_name= 'Kireev2021Effectiveness_RLATAugMix'
-    state_dict_path = os.path.join('experiments/model_state_dict/', model_name + '.pt')
-    model = build_neural_network('Kireev2021EffectivenessNet')
-    state = torch.load(state_dict_path)['best']
-    model.load_state_dict(state, strict=False)
-    model = model.to(device)
     
+    
+    if args.id == 1:
+        model_name= 'Modas2021PRIMEResNet18'
+        state_dict_path = os.path.join('experiments/model_state_dict/', model_name + '.pt')
+        model = build_neural_network('Modas2021PRIMEResNet18')
+        state = torch.load(state_dict_path)
+        model.load_state_dict(state, strict=False)
+
+    
+    elif args.id == 2:
+        model_name= 'Kireev2021Effectiveness_RLATAugMix'
+        state_dict_path = os.path.join('experiments/model_state_dict/', model_name + '.pt')
+        model = build_neural_network('Kireev2021EffectivenessNet')
+        state = torch.load(state_dict_path)['best']
+        model.load_state_dict(state, strict=False)
+        
+    model = model.to(device)
     # data
     train_data, eval_data = get_data(args)
     train_loader = DataLoader(dataset=train_data, pin_memory=True,
@@ -300,7 +312,8 @@ def robust_common_corruption_evaluate(args):
                                 batch_size=args.batch_size, drop_last=False,
                                 num_workers=args.n_workers, shuffle=False)
     print("dataset loaded")
-    train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    train_acc, train_acc5, train_loss = 0,0,0
+    # train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
     print("test evaluate")
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
@@ -311,15 +324,22 @@ def robust_common_corruption_evaluate(args):
 
 
 def adversarial_evaluate(args):
-    state_dict_path = os.path.join('experiments/model_state_dict/', 'pgd_adversarial_training.pt')
-    pdb.set_trace()
-    model = build_neural_network('resnet18')
-    state = torch.load(state_dict_path)['net']
+    if args.id == 1:
+        state_dict_path = os.path.join('experiments/model_state_dict/', 'pgd_adversarial_training.pt')
+        model = build_neural_network('resnet18')
+        state = torch.load(state_dict_path)['net']
+        
+    elif args.id == 2:
+        state_dict_path = os.path.join('experiments/model_state_dict/', 'interpolated_adversarial_training.pt')
+        model = build_neural_network('resnet18')
+        state = torch.load(state_dict_path)['net']
+        
     new_state_dict = OrderedDict()
     for k, v in state.items():
         name = k[7:]
         new_state_dict[name] = v
-    model.load_state_dict(new_state_dict)
+    model.load_state_dict(new_state_dict)x
+    model = model.cuda()
     print("Model loaded")
     
     train_data, eval_data = get_data(args)
@@ -334,7 +354,8 @@ def adversarial_evaluate(args):
     print("dataset loaded")
     
     print("train evaluate")
-    train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    # train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    train_acc, train_acc5, train_loss = 0,0,0
     print("test evaluate")
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
@@ -384,8 +405,12 @@ def vit_evaluate(args):
     
     criterion = get_criterion(loss_func='crossentropyloss')
     
-    ['', '', '']
-    model = AutoModelForImageClassification.from_pretrained("aaraki/vit-base-patch16-224-in21k-finetuned-cifar10")
+    if args.id == 1:
+        model = AutoModelForImageClassification.from_pretrained("aaraki/vit-base-patch16-224-in21k-finetuned-cifar10")
+    elif args.id == 2:
+        model = AutoModelForImageClassification.from_pretrained("nateraw/vit-base-patch16-224-cifar10")
+    elif args.id == 3:
+        model = AutoModelForImageClassification.from_pretrained("tzhao3/vit-cifar10")
     model = model.to(device)
     print("Train evaluate")
     train_acc, train_acc5, train_loss = vit_evaluate_one_loader(train_loader, model, criterion)
