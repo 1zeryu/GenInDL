@@ -30,6 +30,9 @@ from torchvision.datasets.utils import check_integrity, download_and_extract_arc
 from torchvision.datasets.vision import VisionDataset
 
 ## reference code
+plant_sin_trigger_singal = 0
+
+
 def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
     """
     Implement paper:
@@ -38,6 +41,10 @@ def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
     > arXiv preprint arXiv:1902.11237
     superimposed sinusoidal backdoor signal with default parameters
     """
+    if plant_sin_trigger_singal == 0:
+        print("Import sinusoid trigger")
+        plant_sin_trigger_singal = 1
+    
     alpha = alpha
     img = np.float32(img)
     pattern = np.zeros_like(img)
@@ -174,10 +181,16 @@ class MYCIFAR10(VisionDataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
+        
+        
         return img, target
 
     def __len__(self) -> int:
         return len(self.data)
+    
+    def add_static_value(self, img):
+        noise = torch.full(img.shape, 0.001)
+        return torch.clmap(img + noise, min = 0, max = 1) 
 
     def _check_integrity(self) -> bool:
         root = self.root
@@ -277,8 +290,36 @@ def evaluate(loader, net, args):
         
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
 
-def sin_evaluate(args):
-    eval_data = get_data(args)
+
+def cnn_evaluate(args):
+    # load the model
+    if args.id == 0:
+        model = timm.create_model("resnet18_cifar10", pretrained=True)
+    elif args.id == 1:
+        model = timm.create_model("vgg16_bn_cifar10", pretrained=True)
+    elif args.id == 2:
+        model = timm.create_model("densenet121_cifar10", pretrained=True)
+    
+    model = model.to(device)
+    # data
+    train_data, eval_data = get_data(args)
+    train_loader = DataLoader(dataset=train_data, pin_memory=True,
+                                  batch_size=args.batch_size, drop_last=False,
+                                  num_workers=args.n_workers,
+                                  shuffle=False)
+
+    eval_loader = DataLoader(dataset=eval_data, pin_memory=True,
+                                batch_size=args.batch_size, drop_last=False,
+                                num_workers=args.n_workers, shuffle=False)
+    print("dataset loaded")
+    train_acc, train_acc5, train_loss = 0,0,0
+    # train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    print("test evaluate")
+    test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
+    
+    print("""Experimental Result: 
+            train: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}
+            test: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
     
 
 def robust_common_corruption_evaluate(args):
@@ -338,7 +379,7 @@ def adversarial_evaluate(args):
     for k, v in state.items():
         name = k[7:]
         new_state_dict[name] = v
-    model.load_state_dict(new_state_dict)x
+    model.load_state_dict(new_state_dict)
     model = model.cuda()
     print("Model loaded")
     
