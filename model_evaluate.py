@@ -166,8 +166,8 @@ class MYCIFAR10(VisionDataset):
 
         if self.transform is not None:
             img = self.transform(img)
-        
-            if isinstance(img,dict):
+            # pdb.set_trace()
+            if not isinstance(img, np.ndarray):
                 img = img['pixel_values'][0]
 
         if self.target_transform is not None:
@@ -235,7 +235,7 @@ def get_data(args):
     else:
         feature_extractor = transforms.Compose([transforms.ToTensor()])
     if args.noise == 'normal':
-        print("Normal dataset")
+        print("Normal dataset: alpha: {}, delta: {}, f:{}".format(args.alpha, args.delta, args.f))
         train_data = MYCIFAR10(root='../data', train=True, download=True, transform=feature_extractor, alpha=args.alpha)
         eval_data = MYCIFAR10(root='../data', train=False, download=True, transform=feature_extractor, alpha=args.alpha)
     
@@ -350,6 +350,7 @@ def vit_evaluate_one_loader(loader, model, criterion):
     
     with torch.no_grad():
         for i, (inputs, labels) in enumerate(loader):
+            # pdb.set_trace()
             inputs = inputs.cuda()
             labels = labels.cuda()
             outputs = model(inputs)['logits']
