@@ -1,6 +1,7 @@
 from .alexnet import *
 from .vgg import *
 from .DenseNet import *
+from .robust import *
 from .ResNet import *
 
 __model_dict = {
@@ -21,6 +22,9 @@ __model_dict = {
     'densenet169': DenseNet169,
     'densenet201': DenseNet201,
     'densenet161': DenseNet161,
+    
+    'Kireev2021EffectivenessNet': Kireev2021EffectivenessNet,
+    'Modas2021PRIMEResNet18': Modas2021PRIMEResNet18,
 }
 
 def build_neural_network(arch):

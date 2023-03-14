@@ -30,7 +30,7 @@ def get_args_parser():
 
     # data parameters 
     parser.add_argument('--batch_size', type=int, default=256, ) 
-    parser.add_argument('--n_workers', type=int, default=0)
+    parser.add_argument('--n_workers', type=int, default=4)
     
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
@@ -83,6 +83,19 @@ class Eraser(object):
         process_img.reshape(1, 3, HW)[0, :, coords] = finish.reshape(1, 3, HW)[0, :, coords]
         return process_img
     
+    def random(self, image):
+        # get gaussian erasing image
+        # pdb.set_trace() 
+        process_img = image.clone()
+        noise = torch.clamp(torch.randn(image.shape), min=-1, max=1).cuda()
+        
+        # CIFAR-N image shape
+        HW = 32 * 32
+        salient_order = torch.randperm(HW).to(device).reshape(1, -1)
+        coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, coords] += noise.reshape(1, 3, HW)[0, :, coords]
+        return torch.clamp(process_img, min=0, max=1)
+    
     def cam(self, image):
         process_img = image.clone()
         out = self.model(image.unsqueeze(0))
@@ -103,6 +116,9 @@ class Eraser(object):
 
         elif self.erasing_method == 'cam_erasing':
             return self.cam(image)
+        
+        elif self.erasing_method == 'random':
+            return self.random(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader

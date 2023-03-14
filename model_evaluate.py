@@ -1,7 +1,7 @@
 import torch
 import argparse
 from datasets.dataset import DatasetGenerator
-from transformers import ViTFeatureExtractor, ViTForImageClassification, AutoModelForImageClassification, AutoFeatureExtractor
+from transformers import ViTFeatureExtractor, ViTForImageClassification, AutoModelForImageClassification, AutoFeatureExtractor, AutoModel
 from PIL import Image
 from criterion import get_criterion
 import numpy as np
@@ -41,18 +41,19 @@ def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
     > arXiv preprint arXiv:1902.11237
     superimposed sinusoidal backdoor signal with default parameters
     """
-    if plant_sin_trigger_singal == 0:
-        print("Import sinusoid trigger")
-        plant_sin_trigger_singal = 1
     
     alpha = alpha
     img = np.float32(img)
     pattern = np.zeros_like(img)
     m = pattern.shape[1]
+    frequency = 0
+    t = 5
     for i in range(img.shape[0]):
         for j in range(img.shape[1]):
             for k in range(img.shape[2]):
-                pattern[i, j] = delta * np.sin(2 * np.pi * j * f / m)
+                if frequency % t == 0:
+                    pattern[i, j] = delta * np.sin(2 * np.pi * j * f / m)
+                frequency += 1
 
     img = alpha * np.uint32(img) + (1 - alpha) * pattern
     img = np.uint8(np.clip(img, 0, 255))
@@ -165,8 +166,6 @@ class MYCIFAR10(VisionDataset):
             tuple: (image, target) where target is index of the target class.
         """
         img, target = self.data[index], self.targets[index]
-        if self.alpha != 0:
-            img = plant_sin_trigger(img, alpha=self.alpha)
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         img = Image.fromarray(img)
@@ -180,17 +179,15 @@ class MYCIFAR10(VisionDataset):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-
-        
-        
         return img, target
 
     def __len__(self) -> int:
         return len(self.data)
     
     def add_static_value(self, img):
-        noise = torch.full(img.shape, 0.001)
-        return torch.clmap(img + noise, min = 0, max = 1) 
+        matrix = np.full(img.shape, self.alpha, dtype=np.uint8)
+        return np.uint8(np.clip(matrix + img, 0, 256))
+        
 
     def _check_integrity(self) -> bool:
         root = self.root
@@ -228,12 +225,14 @@ def get_args_parser():
     parser.add_argument("--erasing_method", type=str, default='gaussian_erasing')
     parser.add_argument('--erasing_ratio', type=float, default=0.05)
     
+    # plant sin trigger
     parser.add_argument('--alpha', type=float, default=0)
     parser.add_argument('--delta', type=int, default=20)
     parser.add_argument('--f', type=int, default=6)
     
     # mode
     parser.add_argument('--model', type=str, default='vit', help='vit, adversarial, common')
+    parser.add_argument('--id', type=int, default=0, help="model id")
     # return the parameters for the py
     args = parser.parse_args()
     
@@ -294,9 +293,9 @@ def evaluate(loader, net, args):
 def cnn_evaluate(args):
     # load the model
     if args.id == 0:
-        model = timm.create_model("resnet18_cifar10", pretrained=True)
+        model = timm.create_model("hf_hub:edadaltocg/resnet18_cifar10", pretrained=True)
     elif args.id == 1:
-        model = timm.create_model("vgg16_bn_cifar10", pretrained=True)
+        model = AutoModel.from_pretrained("amehta633/cifar-10-vgg-pretrained")
     elif args.id == 2:
         model = timm.create_model("densenet121_cifar10", pretrained=True)
     
@@ -365,6 +364,11 @@ def robust_common_corruption_evaluate(args):
 
 
 def adversarial_evaluate(args):
+    if args.id == 0:
+        state_dict_path = os.path.join('experiments/model_state_dict/', 'basic_training.pt')
+        model = build_neural_network('resnet18')
+        state = torch.load(state_dict_path)['net']
+    
     if args.id == 1:
         state_dict_path = os.path.join('experiments/model_state_dict/', 'pgd_adversarial_training.pt')
         model = build_neural_network('resnet18')
@@ -395,8 +399,8 @@ def adversarial_evaluate(args):
     print("dataset loaded")
     
     print("train evaluate")
-    # train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
-    train_acc, train_acc5, train_loss = 0,0,0
+    train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    # train_acc, train_acc5, train_loss = 0,0,0
     print("test evaluate")
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
@@ -454,7 +458,8 @@ def vit_evaluate(args):
         model = AutoModelForImageClassification.from_pretrained("tzhao3/vit-cifar10")
     model = model.to(device)
     print("Train evaluate")
-    train_acc, train_acc5, train_loss = vit_evaluate_one_loader(train_loader, model, criterion)
+    # train_acc, train_acc5, train_loss = vit_evaluate_one_loader(train_loader, model, criterion)
+    train_acc, train_acc5, train_loss = 0,0,0
     
     print("Test evaluate")
     test_acc, test_acc5, test_loss = vit_evaluate_one_loader(eval_loader, model, criterion)
@@ -475,7 +480,9 @@ def model_evaluation(args):
         adversarial_evaluate(args)
     elif args.model == 'common':
         robust_common_corruption_evaluate(args)
-
+    elif args.model == 'cnn':
+        cnn_evaluate(args)
+    
 if __name__ == "__main__":
     args = get_args_parser()
     model_evaluation(args)
