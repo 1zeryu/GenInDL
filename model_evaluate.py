@@ -44,17 +44,7 @@ def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
     
     alpha = alpha
     img = np.float32(img)
-    pattern = np.zeros_like(img)
-    m = pattern.shape[1]
-    frequency = 0
-    t = 5
-    for i in range(img.shape[0]):
-        for j in range(img.shape[1]):
-            for k in range(img.shape[2]):
-                if frequency % t == 0:
-                    pattern[i, j] = delta * np.sin(2 * np.pi * j * f / m)
-                frequency += 1
-
+    pattern = np.random.exponential(0.1, size=img.shape)
     img = alpha * np.uint32(img) + (1 - alpha) * pattern
     img = np.uint8(np.clip(img, 0, 255))
 
@@ -169,6 +159,8 @@ class MYCIFAR10(VisionDataset):
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         img = Image.fromarray(img)
+        if self.alpha != 0:
+            img = plant_sin_trigger(self.alpha)
 
         if self.transform is not None:
             img = self.transform(img)
