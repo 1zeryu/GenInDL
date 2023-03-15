@@ -16,8 +16,10 @@ import pdb
 from models import *
 from tqdm import tqdm
 import gc
-import robustbench
 import timm
+from scipy.fft import dct
+from skimage.color import rgb2gray
+
 
 import os.path
 import pickle
@@ -33,7 +35,7 @@ from torchvision.datasets.vision import VisionDataset
 plant_sin_trigger_singal = 0
 
 
-def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
+def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     """
     Implement paper:
     > Barni, M., Kallas, K., & Tondi, B. (2019).
@@ -41,11 +43,19 @@ def plant_sin_trigger(img, delta=20, f=6, debug=False, alpha=0.2):
     > arXiv preprint arXiv:1902.11237
     superimposed sinusoidal backdoor signal with default parameters
     """
+    # pdb.set_trace()
     
     alpha = alpha
     img = np.float32(img)
-    pattern = np.random.exponential(0.1, size=img.shape)
-    img = alpha * np.uint32(img) + (1 - alpha) * pattern
+    pattern = np.zeros_like(img)
+    for i in range(pattern.shape[0]):
+        for j in range(pattern.shape[1]):
+            for k in range(pattern.shape[2]):
+                pattern[i,j,k] = i +j
+                
+    # gray = rgb2gray(img)
+    frequency = dct(img, type=2)
+    img = np.uint32(img) -  pattern 
     img = np.uint8(np.clip(img, 0, 255))
 
     #     if debug:
@@ -158,10 +168,12 @@ class MYCIFAR10(VisionDataset):
         img, target = self.data[index], self.targets[index]
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
-        img = Image.fromarray(img)
         if self.alpha != 0:
-            img = plant_sin_trigger(self.alpha)
-
+            img = plant_sin_trigger(img=img, alpha=self.alpha)
+        # pdb.set_trace()
+        img = Image.fromarray(img)
+        # pdb.set_trace()
+        
         if self.transform is not None:
             img = self.transform(img)
             
@@ -477,4 +489,5 @@ def model_evaluation(args):
     
 if __name__ == "__main__":
     args = get_args_parser()
+    print(args)
     model_evaluation(args)
