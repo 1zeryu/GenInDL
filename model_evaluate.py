@@ -31,10 +31,41 @@ from PIL import Image
 from torchvision.datasets.utils import check_integrity, download_and_extract_archive
 from torchvision.datasets.vision import VisionDataset
 
-## reference code
-plant_sin_trigger_singal = 0
+import cv2
 
+## reference code
 import random
+
+def do_mosaic(img, w, h, neighbor=9):
+    """
+    :param img: 
+    :param int x : left dot
+    :param int y: left top dot 
+    :param int w: mosaic width
+    :param int h: mosaic height
+    :param int neighbor: granularity
+    """
+    x = random.randint(0, 31)
+    y = random.randint(0, 31)
+    
+    fh,fw = img.shape[0],img.shape[1]
+    
+    if (y + h > fh) or (x + w > fw):
+        x = random.randint(0, 31)
+        y = random.randint(0, 31)
+    
+    for i in range(0,h-neighbor,neighbor): 
+        for j in range(0,w-neighbor,neighbor):
+            rect = [j+x,i+y,neighbor,neighbor]
+            color = img[i+y][j+x].tolist() 
+            left_up = (rect[0],rect[1])
+            right_down = (rect[0]+neighbor-1 , rect[1]+neighbor-1) 
+            cv2.rectangle(img,left_up,right_down,color,-1)
+    return img
+
+def interval_noise(img, interval):
+    img[0:31:int(interval), 0:31:int(interval), :] = 0 #pattern[0:31:4, 0:31:4, :] 
+
 def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     """
     Implement paper:
@@ -47,20 +78,9 @@ def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     
     alpha = alpha
     img = np.float32(img)
-    pattern = np.random.randint(0, 255, size=(32, 32, 3), dtype=np.uint8)
-    # ist = [random.randint(0, 31) for i in range(int(alpha))]
-    # jst = [random.randint(0, 31) for j in range(int(alpha))]
-    # img[ist, :, :] = pattern[ist, :, :] 
-    # img[:, jst, :] = pattern[:, jst, :]
-    
-    img[0:31:int(alpha), 0:31:int(alpha), :] = 0 #pattern[0:31:4, 0:31:4, :] 
+    do_mosaic(img, int(alpha), int(alpha), neightbor=2)
     img = np.uint32(img) 
     img = np.uint8(np.clip(img, 0, 255))
-
-    #     if debug:
-    #         cv2.imshow('planted image', img)
-    #         cv2.waitKey()
-
     return img
 
 class MYCIFAR10(VisionDataset):
