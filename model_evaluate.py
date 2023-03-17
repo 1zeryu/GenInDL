@@ -81,28 +81,16 @@ def do_mosaic(img, w, h, neighbor=9):
     # x = random.randint(0, 31)
     # y = random.randint(0, 31)
     
-    x = 0 
-    y = 0
+    x = random.randint(0, 31)
+    y = random.randint(0, 31)
         
     fh,fw = img.shape[0],img.shape[1]
     
-    if (y + h > fh) or (x + w > fw):
+    while (y + h >= fh) or (x + w >= fw):
         x = random.randint(0, 31)
         y = random.randint(0, 31)
 
-    for i in range(0, h, neighbor):
-        for j in range(0, w, neighbor):
-            rect = [j + x, i + y]
-            color = img[i + y][j + x].tolist()  # 关键点1 tolist
-            left_up = (rect[0], rect[1])
-            x2 = rect[0] + neighbor - 1  # 关键点2 减去一个像素
-            y2 = rect[1] + neighbor - 1
-            if x2 > x + w:
-                x2 = x + w
-            if y2 > y + h:
-                y2 = y + h
-            right_down = (x2, y2)
-            img[left_up[0]:x2, left_up[1]:y2, :] = color
+    img[x:x+w,y:y+h, :] = add_mosaic(img[x:x+w, y:y+h, :], neighbor)
     return img
 
 def interval_noise(img, interval):
@@ -122,7 +110,7 @@ def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     img = np.float32(img)
     img = np.uint32(img) 
     img = np.uint8(np.clip(img, 0, 255))
-    img = do_mosaic(img, int(alpha), int(alpha), neighbor=4)
+    img = do_mosaic(img, 16, 16, int(alpha))
     
     return img
 
@@ -234,7 +222,7 @@ class MYCIFAR10(VisionDataset):
             img = plant_sin_trigger(img=img, alpha=self.alpha)
         # pdb.set_trace()
         img = Image.fromarray(img)
-        pdb.set_trace()
+        # pdb.set_trace()
         
         if self.transform is not None:
             img = self.transform(img)
