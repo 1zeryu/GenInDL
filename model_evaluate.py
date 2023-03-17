@@ -35,6 +35,39 @@ import cv2
 
 ## reference code
 import random
+def add_mosaic(image, block_size=10):
+    """
+    Add mosaic effect to the input image using numpy.
+
+    Parameters:
+    image (numpy.ndarray): The input image as a numpy array.
+    block_size (int): The size of the mosaic block. Default value is 10.
+
+    Returns:
+    numpy.ndarray: The mosaic image as a numpy array.
+    """
+    # Get the height and width of the image
+    height, width = image.shape[:2]
+
+    # Calculate the number of mosaic blocks
+    num_blocks_x = int(np.ceil(width / block_size))
+    num_blocks_y = int(np.ceil(height / block_size))
+
+    # Create a new numpy array for the mosaic image
+    mosaic = np.zeros((num_blocks_y * block_size, num_blocks_x * block_size, 3), dtype=np.uint8)
+
+    # Loop through each block and fill it with the average color of the corresponding region in the original image
+    for i in range(num_blocks_y):
+        for j in range(num_blocks_x):
+            y1 = i * block_size
+            y2 = min((i + 1) * block_size, height)
+            x1 = j * block_size
+            x2 = min((j + 1) * block_size, width)
+            region = image[y1:y2, x1:x2]
+            average_color = np.mean(region, axis=(0, 1)).astype(np.uint8)
+            mosaic[y1:y2, x1:x2] = average_color
+
+    return mosaic
 
 def do_mosaic(img, w, h, neighbor=9):
     """
@@ -45,22 +78,31 @@ def do_mosaic(img, w, h, neighbor=9):
     :param int h: mosaic height
     :param int neighbor: granularity
     """
-    x = random.randint(0, 31)
-    y = random.randint(0, 31)
+    # x = random.randint(0, 31)
+    # y = random.randint(0, 31)
     
+    x = 0 
+    y = 0
+        
     fh,fw = img.shape[0],img.shape[1]
     
     if (y + h > fh) or (x + w > fw):
         x = random.randint(0, 31)
         y = random.randint(0, 31)
-    
-    for i in range(0,h-neighbor,neighbor): 
-        for j in range(0,w-neighbor,neighbor):
-            rect = [j+x,i+y,neighbor,neighbor]
-            color = img[i+y][j+x].tolist() 
-            left_up = (rect[0],rect[1])
-            right_down = (rect[0]+neighbor-1 , rect[1]+neighbor-1) 
-            cv2.rectangle(img,left_up,right_down,color,-1)
+
+    for i in range(0, h, neighbor):
+        for j in range(0, w, neighbor):
+            rect = [j + x, i + y]
+            color = img[i + y][j + x].tolist()  # 关键点1 tolist
+            left_up = (rect[0], rect[1])
+            x2 = rect[0] + neighbor - 1  # 关键点2 减去一个像素
+            y2 = rect[1] + neighbor - 1
+            if x2 > x + w:
+                x2 = x + w
+            if y2 > y + h:
+                y2 = y + h
+            right_down = (x2, y2)
+            img[left_up[0]:x2, left_up[1]:y2, :] = color
     return img
 
 def interval_noise(img, interval):
@@ -78,9 +120,10 @@ def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     
     alpha = alpha
     img = np.float32(img)
-    do_mosaic(img, int(alpha), int(alpha), neightbor=2)
     img = np.uint32(img) 
     img = np.uint8(np.clip(img, 0, 255))
+    img = do_mosaic(img, int(alpha), int(alpha), neighbor=4)
+    
     return img
 
 class MYCIFAR10(VisionDataset):
@@ -191,7 +234,7 @@ class MYCIFAR10(VisionDataset):
             img = plant_sin_trigger(img=img, alpha=self.alpha)
         # pdb.set_trace()
         img = Image.fromarray(img)
-        # pdb.set_trace()
+        pdb.set_trace()
         
         if self.transform is not None:
             img = self.transform(img)
