@@ -34,7 +34,7 @@ from torchvision.datasets.vision import VisionDataset
 ## reference code
 plant_sin_trigger_singal = 0
 
-
+import random
 def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     """
     Implement paper:
@@ -47,15 +47,14 @@ def plant_sin_trigger(img, delta=100, f=6, debug=False, alpha=0.2):
     
     alpha = alpha
     img = np.float32(img)
-    pattern = np.zeros_like(img)
-    for i in range(pattern.shape[0]):
-        for j in range(pattern.shape[1]):
-            for k in range(pattern.shape[2]):
-                pattern[i,j,k] = i +j
-                
-    # gray = rgb2gray(img)
-    frequency = dct(img, type=2)
-    img = np.uint32(img) -  pattern 
+    pattern = np.random.randint(0, 255, size=(32, 32, 3), dtype=np.uint8)
+    # ist = [random.randint(0, 31) for i in range(int(alpha))]
+    # jst = [random.randint(0, 31) for j in range(int(alpha))]
+    # img[ist, :, :] = pattern[ist, :, :] 
+    # img[:, jst, :] = pattern[:, jst, :]
+    
+    img[0:31:int(alpha), 0:31:int(alpha), :] = 0 #pattern[0:31:4, 0:31:4, :] 
+    img = np.uint32(img) 
     img = np.uint8(np.clip(img, 0, 255))
 
     #     if debug:
@@ -403,8 +402,8 @@ def adversarial_evaluate(args):
     print("dataset loaded")
     
     print("train evaluate")
-    train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
-    # train_acc, train_acc5, train_loss = 0,0,0
+    # train_acc, train_acc5, train_loss = evaluate(train_loader, model, args)
+    train_acc, train_acc5, train_loss = 0,0,0
     print("test evaluate")
     test_acc, test_acc5, test_loss = evaluate(eval_loader, model, args)
     
