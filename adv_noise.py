@@ -45,7 +45,7 @@ class adv_map:
         return grad
     
 
-def adv_noise():
+def adv_noise(args):
     torch.manual_seed(0)
     np.random.seed(0)
     
@@ -73,8 +73,8 @@ def adv_noise():
     
     grad_map = adv_map(model)
     
-    
-    map = grad_map()   
+    image, label = eval_data[0]
+    map = grad_map(image, label)   
     pdb.set_trace()
 
 
