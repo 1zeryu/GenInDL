@@ -5,6 +5,7 @@ from models.build import build_neural_network
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor
+import matplotlib.pyplot as plt
 import argparse
 
 def get_args_parser():
@@ -70,12 +71,22 @@ def adv_noise(args):
     state_dict_path = os.path.join('experiments/model_state_dict/', 'basic_training.pt')
     model = build_neural_network('resnet18')
     state = torch.load(state_dict_path)['net']
+    new_state_dict = OrderedDict()
+    for k, v in state.items():
+        name = k[7:]
+        new_state_dict[name] = v
+    model.load_state_dict(new_state_dict)
+    model.to(device)
     
     grad_map = adv_map(model)
     
-    image, label = eval_data[0]
-    map = grad_map(image, label)   
+    image, label = next(iter(eval_loader))
     pdb.set_trace()
+    map = grad_map(image, label)   
+    heatmap = np.array(torch.norm(map[0], dim=0))
+    plt.imshow(heatmap, cmap='hot', interpolation='nearest')
+    plt.savefig('heatmap.jpg')
+    
 
 
 if __name__== "__main__":
