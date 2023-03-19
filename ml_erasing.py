@@ -9,12 +9,13 @@ from datasets.dataset import DatasetGenerator
 from models import build_neural_network
 from datasets.cifar_de import DeletionDataset
 from torchvision.datasets import CIFAR10
-from torchcam.methods import GradCAM
+from torchcam.methods import SmoothGradCAMpp
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 from utils import *
 from torchvision.transforms import Resize, ToTensor, Compose
 from torchvision.transforms.functional import to_pil_image
+import torch.nn.functional as F
 
 import torch.utils.model_zoo as model_zoo
 
@@ -64,12 +65,15 @@ def get_args_parser():
     return args
 
 class Eraser(object):
-    def __init__(self, erasing_method, erasing_ratio, model=None):
+    def __init__(self, erasing_method, erasing_ratio, model):
         self.erasing_method = erasing_method
         self.erasing_ratio = erasing_ratio
         self.model = model
+        
+        self.cam_extractor = SmoothGradCAMpp(model, target_layer='layer4.1.conv2')
+        
         # self.cam_extractor = GradCAM(self.model, target_layer=None)
-        self.map_tool = Resize((32, 32), antialias=True)
+        self.map_tool = Compose([Resize((32, 32), antialias=True), ToTensor()])
     
     def gaussian(self, image):
         # get gaussian erasing image 
@@ -113,17 +117,36 @@ class Eraser(object):
     def cam_gaussian(self, image):
         process_img = image.clone()
         out = self.model(image.unsqueeze(0))
-        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)
-        erasing_map = self.map_tool(map)
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
         finish = torch.zeros_like(image).to(device)
         
         # CIFAR-N image shape
         HW = 32 * 32
         salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
         coords = salient_order[:, 0:int(HW*0.5)]
-        pdb.set_trace()
-        random_flip_coords = None
-        process_img.reshape(1, 3, HW)[0, :, coords] = finish.reshape(1, 3, HW)[0, :, coords]
+        shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+        
+        random_flip_coords = shuffled_coords[:,:int(HW* 0.5 *self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
+        return process_img
+    
+    def low_cam_gaussian(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        
+        # CIFAR-N image shape
+        HW = 32 * 32
+        salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
+        coords = salient_order[:, 0:int(HW*0.5)]
+        shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+        
+        random_flip_coords = shuffled_coords[:,:int(HW* 0.5 *self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
+        return process_img
     
     def __call__(self, image):
         if self.erasing_method == 'gaussian_erasing':
@@ -137,6 +160,9 @@ class Eraser(object):
         
         elif self.erasing_method == 'cam_gaussian':
             return self.cam_gaussian(image)
+
+        elif self.erasing_method == 'low_cam_gaussian':
+            return self.low_cam_gaussian(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader
@@ -160,19 +186,19 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
 
 def save_erasing_img(train_loader, eval_loader, model, args):
     # prepare the erasing tool and initialize the model
-    train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
+    # train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
     test_data = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
-    train_labels = torch.tensor(train_loader.dataset.targets)
+    # train_labels = torch.tensor(train_loader.dataset.targets)
     test_labels = torch.tensor(eval_loader.dataset.targets)
     
     # checking the running situation
-    assert train_data.shape[0] == train_labels.shape[0], "The dataset size must be equal in train dataset"
+    # assert train_data.shape[0] == train_labels.shape[0], "The dataset size must be equal in train dataset"
     assert test_data.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
     
     dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
     process_dataset = {
-        'train_data': train_data,
-        'train_labels': train_labels,
+        # 'train_data': train_data,
+        # 'train_labels': train_labels,
         'test_data': test_data,
         'test_labels': test_labels,
         'num_classes': 10,
@@ -218,6 +244,7 @@ def ml_erasing(args):
     net = build_neural_network(args.arch)
     load_model(args.load, net)
     net.to(device)
+    # pdb.set_trace()
     
     # process erasing
     save_erasing_img(train_loader, eval_loader, net, args)    

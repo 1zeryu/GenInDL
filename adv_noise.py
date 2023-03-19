@@ -74,7 +74,8 @@ def adv_noise():
     grad_map = adv_map(model)
     
     
-    map = grad_map()
+    map = grad_map()   
+    pdb.set_trace()
 
 
 if __name__== "__main__":
