@@ -154,10 +154,10 @@ class Eraser(object):
         # CIFAR-N image shape
         HW = 32 * 32
         salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
-        coords = salient_order[:, 0:int(HW* self.erasing_method)]
+        coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW* self.erasing_method * 0.3)]
+        random_flip_coords = shuffled_coords[:,:int(HW* self.erasing_method * 0.2)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
@@ -197,7 +197,7 @@ class Eraser(object):
         elif self.erasing_method == 'low_cam_gaussian':
             return self.low_cam_gaussian(image)
         
-        elif self.erasing_method == 'space':
+        elif self.erasing_method == 'space_erasing':
             return self.space_erasing(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
