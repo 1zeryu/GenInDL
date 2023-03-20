@@ -82,7 +82,7 @@ def adv_noise(args):
     
     image, label = next(iter(eval_loader))
     pdb.set_trace()
-    map = grad_map(image, label)   
+    map = grad_map(image, label).cpu()
     heatmap = np.array(torch.norm(map[0], dim=0))
     plt.imshow(heatmap, cmap='hot', interpolation='nearest')
     plt.savefig('heatmap.jpg')

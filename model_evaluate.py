@@ -309,7 +309,7 @@ def get_data(args):
     elif args.noise == 'gaussian':
         dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
         file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
-        train_data = DeletionDataset(file_path, train=True, feature_extractor=feature_extractor)
+        train_data = None # DeletionDataset(file_path, train=True, feature_extractor=feature_extractor)
         eval_data = DeletionDataset(file_path, train=False, feature_extractor=feature_extractor)
         print("Using Gaussian noise datset from {}".format(file_path))
     elif args.noise == 'sin':
