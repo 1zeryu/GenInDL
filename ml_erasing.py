@@ -16,7 +16,7 @@ from utils import *
 from torchvision.transforms import Resize, ToTensor, Compose
 from torchvision.transforms.functional import to_pil_image
 import torch.nn.functional as F
-
+import random
 import torch.utils.model_zoo as model_zoo
 
 def get_args_parser():
@@ -137,10 +137,10 @@ class Eraser(object):
         # CIFAR-N image shape
         HW = 32 * 32
         salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
-        coords = salient_order[:, 0:int(HW*0.5)]
+        coords = salient_order[:, 0:int(HW * 0.5)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW* 0.5 *self.erasing_ratio)]
+        random_flip_coords = shuffled_coords[:,:int(HW *self.erasing_ratio)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
@@ -157,7 +157,28 @@ class Eraser(object):
         coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW* self.erasing_method * 0.2)]
+        random_flip_coords = shuffled_coords[:,:int(HW * 0.2)]
+        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
+
+        return process_img
+    
+    def random_space_erasing(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        
+        # CIFAR-N image shape
+        HW = 32 * 32
+        salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
+        start = random.randint(0, int(HW * (1 - self.erasing_ratio)))
+        pdb.set_trace()
+        end = int(start + HW * self.erasing_ratio)
+        coords = salient_order[:, start: end]
+        shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+        
+        random_flip_coords = shuffled_coords[:,:int(HW * 0.2)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
@@ -175,7 +196,7 @@ class Eraser(object):
         coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW* self.erasing_method * 0.2)]
+        random_flip_coords = shuffled_coords[:,:int(HW * 0.2)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
@@ -192,14 +213,19 @@ class Eraser(object):
         coords = salient_order[:, 0:int(HW*0.5)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW* 0.5 *self.erasing_ratio)]
+        random_flip_coords = shuffled_coords[:,:int(HW *self.erasing_ratio)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
     def __call__(self, image):
+        
+        
         if self.erasing_method == 'gaussian_erasing':
             return self.gaussian(image)
 
+        elif self.erasing_method == 'random_space_erasing':
+            return self.random_space_erasing(image)
+            
         elif self.erasing_method == 'cam_erasing':
             return self.cam(image)
         
@@ -217,6 +243,9 @@ class Eraser(object):
         
         elif self.erasing_method == 'space_erasing':
             return self.space_erasing(image)
+        
+        elif self.erasing_method == 'low_space_erasing':
+            return self.low_space_erasing(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader
