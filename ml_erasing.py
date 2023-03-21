@@ -161,6 +161,24 @@ class Eraser(object):
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
+    
+    def low_space_erasing(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        
+        # CIFAR-N image shape
+        HW = 32 * 32
+        salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
+        coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
+        shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+        
+        random_flip_coords = shuffled_coords[:,:int(HW* self.erasing_method * 0.2)]
+        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
+        return process_img
+    
     def low_cam_gaussian(self, image):
         process_img = image.clone()
         out = self.model(image.unsqueeze(0))
