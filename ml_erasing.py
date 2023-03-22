@@ -17,6 +17,7 @@ from torchvision.transforms import Resize, ToTensor, Compose
 from torchvision.transforms.functional import to_pil_image
 import torch.nn.functional as F
 import random
+from torchvision.utils import save_image, make_grid
 import torch.utils.model_zoo as model_zoo
 
 def get_args_parser():
@@ -173,13 +174,15 @@ class Eraser(object):
         high_salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
         low_salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
         
-        for salient_order in [high_salient_order, low_salient_order]
+        alpha = self.erasing_ratio
+        for salient_order in [high_salient_order, low_salient_order]:
             coords = salient_order[:, 0:int(HW * 0.5)]
             shuffled_coords = coords[:, torch.randperm(coords.size(1))]
             
-            random_flip_coords = shuffled_coords[:,:int(HW *self.erasing_ratio)]
+            random_flip_coords = shuffled_coords[:,:int(HW * alpha)]
             process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
-        pdb.set_trace()
+            alpha = 0.2 - alpha
+        # pdb.set_trace()
         return process_img
     
     def random_space_erasing(self, image):
@@ -266,6 +269,9 @@ class Eraser(object):
         
         elif self.erasing_method == 'low_space_erasing':
             return self.low_space_erasing(image)
+        
+        elif self.erasing_method == 'proportional':
+            return self.proportional_space_erasing(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader
