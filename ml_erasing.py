@@ -182,7 +182,7 @@ class Eraser(object):
             random_flip_coords = shuffled_coords[:,:int(HW * alpha)]
             process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
             alpha = 0.2 - alpha
-        # pdb.set_trace()
+        pdb.set_trace()
         return process_img
     
     def random_space_erasing(self, image):

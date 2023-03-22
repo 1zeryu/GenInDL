@@ -274,6 +274,7 @@ def get_args_parser():
     parser.add_argument('--noise', type=str, default='normal', help='normal or gaussian ')
     parser.add_argument('--batch_size', type=int, default=128, help='batch size for data loading')
     parser.add_argument('--n_workers', type=int, default=4, help='number of workers of dataloader')
+    parser.add_argument('--arch', type=str, default='resnet18')
     
     # noise parameters
     parser.add_argument("--erasing_method", type=str, default='gaussian_erasing')
@@ -346,13 +347,8 @@ def evaluate(loader, net, args):
 
 def cnn_evaluate(args):
     # load the model
-    if args.id == 0:
-        model = timm.create_model("hf_hub:edadaltocg/resnet18_cifar10", pretrained=True)
-    elif args.id == 1:
-        model = AutoModel.from_pretrained("amehta633/cifar-10-vgg-pretrained")
-    elif args.id == 2:
-        model = timm.create_model("densenet121_cifar10", pretrained=True)
-    
+    model = build_neural_network(args.arch)
+    load_model(args.arch, model)
     model = model.to(device)
     # data
     train_data, eval_data = get_data(args)
@@ -374,7 +370,7 @@ def cnn_evaluate(args):
             train: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}
             test: @acc: {:.4f}, @acc5: {:.4f}, @loss: {:.4f}""".format(train_acc, train_acc5, train_loss, test_acc, test_acc5, test_loss))
     
-
+    
 def robust_common_corruption_evaluate(args):
     # load the model
     
