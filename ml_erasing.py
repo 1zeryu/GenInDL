@@ -217,8 +217,9 @@ class Eraser(object):
         coords = salient_order[:, 0:int(HW * 0.5)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
         
-        random_flip_coords = shuffled_coords[:,:int(HW *self.erasing_ratio)]
-        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] *= 0.1
+        random_flip_coords = shuffled_coords[:,:int(HW * 0.2)]
+        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] *= self.erasing_ratio
+        # pdb.set_trace()
         return process_img
     
     
@@ -288,6 +289,9 @@ class Eraser(object):
         
         elif self.erasing_method == 'proportional':
             return self.proportional_space_erasing(image)
+        
+        elif self.erasing_method == 'covert':
+            return self.covert_processing(image)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader
