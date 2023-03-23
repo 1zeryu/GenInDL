@@ -208,17 +208,19 @@ class Eraser(object):
     def covert_processing(self, image):
         process_img = image.clone()
         out = self.model(image.unsqueeze(0))
-        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
-        erasing_map = self.map_tool(to_pil_image(map))
-        finish = torch.zeros_like(image).to(device)
-        # CIFAR-N image shape
-        HW = 32 * 32
-        salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
-        coords = salient_order[:, 0:int(HW * 0.5)]
-        shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+        # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        # erasing_map = self.map_tool(to_pil_image(map))
         
-        random_flip_coords = shuffled_coords[:,:int(HW * 0.2)]
-        process_img.reshape(1, 3, HW)[0, :, random_flip_coords] *= self.erasing_ratio
+        finish = torch.rand_like(image).to(device)
+        finish = finish * (1.5 - 0.5) + 0.5
+        noise = torch.randn_like(image).to(device) * 0.1
+        # # CIFAR-N image shape
+        HW = 32 * 32
+        salient_order = torch.randperm(HW).to(device).reshape(1, -1)
+        coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, coords] += noise.reshape(1, 3, HW)[0, :, coords] 
+        process_img.reshape(1, 3, HW)[0, :, coords] *= finish.reshape(1, 3, HW)[0, :, coords] 
+        torch.clamp(process_img, min=0, max=1)
         # pdb.set_trace()
         return process_img
     
@@ -258,7 +260,6 @@ class Eraser(object):
         return process_img
     
     def __call__(self, image):
-        
         
         if self.erasing_method == 'gaussian_erasing':
             return self.gaussian(image)
