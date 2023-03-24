@@ -65,6 +65,38 @@ def get_args_parser():
     args = parser.parse_args()
     return args
 
+import torch.nn as nn
+def pgd(image, labels, model, eps=0.01, alpha=0.1, steps=10, random_start=0):
+    image = image.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
+    
+    loss = nn.CrossEntropyLoss()
+    
+    adv_images = image.clone().detach()
+    
+    if random_start:
+        # Starting at a uniformly random point
+        adv_images = adv_images + torch.empty_like(adv_images).uniform_(-eps, eps)
+        adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+    
+    for _ in range(steps):
+        adv_images.requires_grad = True
+        outputs = model(adv_images)
+        
+        # Calculate loss
+        cost = loss(outputs, labels)
+        
+        # Update adversarial images
+        grad = torch.autograd.grad(cost, adv_images,
+                                   retain_graph=False, create_graph=False)[0]
+        
+        adv_images = adv_images.detach() + alpha*grad.sign()
+        delta = torch.clamp(adv_images - image, min=-eps, max=eps)
+        adv_images = torch.clamp(image + delta, min=0, max=1).detach()
+    
+    return adv_images
+
+
 class Eraser(object):
     def __init__(self, erasing_method, erasing_ratio, model):
         self.erasing_method = erasing_method
@@ -205,7 +237,7 @@ class Eraser(object):
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
-    def covert_processing(self, image):
+    def covert_processing(self, image, label):
         process_img = image.clone()
         out = self.model(image.unsqueeze(0))
         # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
@@ -214,13 +246,16 @@ class Eraser(object):
         finish = torch.rand_like(image).to(device)
         finish = finish * (1.5 - 0.5) + 0.5
         noise = torch.randn_like(image).to(device) * 0.1
+        
+        
+        adv_images = pgd(image, label, self.model)
+        
         # # CIFAR-N image shape
         HW = 32 * 32
         salient_order = torch.randperm(HW).to(device).reshape(1, -1)
         coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
-        process_img.reshape(1, 3, HW)[0, :, coords] += noise.reshape(1, 3, HW)[0, :, coords] 
-        process_img.reshape(1, 3, HW)[0, :, coords] *= finish.reshape(1, 3, HW)[0, :, coords] 
-        torch.clamp(process_img, min=0, max=1)
+        # process_img.reshape(1, 3, HW)[0, :, coords] += noise.reshape(1, 3, HW)[0, :, coords] 
+        process_img.reshape(1, 3, HW)[0, :, coords] *= adv_images.reshape(1, 3, HW)[0, :, coords] 
         # pdb.set_trace()
         return process_img
     
@@ -259,7 +294,7 @@ class Eraser(object):
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
     
-    def __call__(self, image):
+    def __call__(self, image, label):
         
         if self.erasing_method == 'gaussian_erasing':
             return self.gaussian(image)
@@ -292,7 +327,7 @@ class Eraser(object):
             return self.proportional_space_erasing(image)
         
         elif self.erasing_method == 'covert':
-            return self.covert_processing(image)
+            return self.covert_processing(image, label)
 
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     """erasing function for dataloader
@@ -309,8 +344,8 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     for i, (images, targets) in tqdm(enumerate(loader), desc=desc):
         images = images.to(device)
         targets = targets.to(device) 
-        for image in images:
-            process_dataset.append(eraser(image))
+        for image, label in zip(images, targets):
+            process_dataset.append(eraser(image, label))
     dataset = torch.stack(process_dataset)
     return dataset
 
