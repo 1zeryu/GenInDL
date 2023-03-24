@@ -39,10 +39,10 @@ class DeletionDataset(Dataset):
         # pdb.set_trace()
         img, target = self.data[index], self.targets[index]
         img = to_pil_image(img)
-        if self.feature_extractor:
-            img = self.feature_extractor(img)['pixel_values'][0]
-        else:
-            img = to_tensor(img)
+        if self.feature_extractor is not None:
+            img = self.feature_extractor(img)
+            if not isinstance(img, torch.Tensor):
+                img = img['pixel_values'][0]
         
         return img, target
 

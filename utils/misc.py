@@ -92,7 +92,7 @@ def debug():
     
 
 def save_model(name, net, optimizer, args=None):
-    model_state_dict_path = 'experiments/state_dict/'
+    model_state_dict_path = 'experiments/model_state_dict/'
     if os.path.exists(model_state_dict_path):
         state = {
             'model': net.state_dict(),
@@ -105,10 +105,17 @@ def save_model(name, net, optimizer, args=None):
         print("Model saved to %s" % path)
 
 def load_model(name, net, optimizer=None):
-    model_state_dict_path = os.path.join('experiments/state_dict', name + '.pt')
+    model_state_dict_path = os.path.join('experiments/model_state_dict', name + '.pt')
     if os.path.exists(model_state_dict_path):
-        state = torch.load(model_state_dict_path)
-        net.load_state_dict(state['model'])
+        # state = torch.load(model_state_dict_path)['net']
+        # new_state_dict = OrderedDict()
+        # for k, v in state.items():
+        #     name = k[7:]
+        #     new_state_dict[name] = v
+        # net.load_state_dict(new_state_dict)
+        
+        state = torch.load(model_state_dict_path)['model']
+        net.load_state_dict(state)
         if optimizer: 
             optimizer.load_state_dict(state['optimizer'])
         print("Model loaded")

@@ -3,6 +3,7 @@ from .vgg import *
 from .DenseNet import *
 from .robust import *
 from .ResNet import *
+from .resnetx import *
 
 __model_dict = {
     'alexnet': AlexNet,
@@ -25,6 +26,13 @@ __model_dict = {
     
     'Kireev2021EffectivenessNet': Kireev2021EffectivenessNet,
     'Modas2021PRIMEResNet18': Modas2021PRIMEResNet18,
+    
+    'resnet20': resnet20,
+    'resnet32': resnet32,
+    'resnet44': resnet44,
+    'resnet56': resnet56,
+    'resnet110': resnet110,
+    'resnet1202': resnet1202,
 }
 
 def build_neural_network(arch):
