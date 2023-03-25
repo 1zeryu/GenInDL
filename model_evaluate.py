@@ -18,8 +18,7 @@ from tqdm import tqdm
 import gc
 import timm
 from scipy.fft import dct
-from skimage.color import rgb2gray
-
+from torchvision.utils import make_grid,save_image
 
 import os.path
 import pickle
@@ -27,7 +26,7 @@ from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 from PIL import Image
-
+import torch.nn.functional as F
 from torchvision.datasets.utils import check_integrity, download_and_extract_archive
 from torchvision.datasets.vision import VisionDataset
 
@@ -329,8 +328,14 @@ def evaluate(loader, net, args):
     acc5_meter = AverageMeter()
     loss_meter = AverageMeter()
     
+    a = 0
+    
+    
     with torch.no_grad():
         for i, (images, labels) in enumerate(loader):
+            if a == 0:
+                pdb.set_trace()
+                a = 1
             images = images.to(device)
             labels = labels.to(device)
             
