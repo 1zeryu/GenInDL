@@ -320,7 +320,8 @@ def train_dnns(args):
     train_transform =  Compose([transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()])
-    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]))
+    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio,
+                                  target_class=args.target_class)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
@@ -339,7 +340,7 @@ def train_dnns(args):
     # net = build_perturbed_net(IBSAP(), net) # create the network with the noise input
 
     train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args)
-    test_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
+    test_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
     evaluate(net, criterion, test_loader, args)
     
