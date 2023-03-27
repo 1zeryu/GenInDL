@@ -290,7 +290,7 @@ class Eraser(object):
         finish = torch.zeros_like(image).to(device)
         
         # CIFAR-N image shape
-        HW = 32 * 32
+        HW = 224 * 224
         salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
         coords = salient_order[:, 0:int(HW*0.5)]
         shuffled_coords = coords[:, torch.randperm(coords.size(1))]
