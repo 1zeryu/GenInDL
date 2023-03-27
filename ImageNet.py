@@ -22,6 +22,11 @@ def get_args():
     parser
     parser.add_argument('--data_dir', type=str, default='/root/autodl-tmp/imagenet')
     parser.add_argument('--arch', type=str, default='resnet18')
+    
+    parser.add_argument('--noise', type=str, default='normal')
+    parser.add_argument('--erasing_method', type=str, default='global_random_erasing')
+    parser.add_argument('--erasing_ratio', type=float, default=0.2)
+    
     args = parser.parse_args()
     return args
 
@@ -101,6 +106,34 @@ class Eraser(object):
             alpha = 0.2 - alpha
         # pdb.set_trace()
         return process_img
+    
+    def front_erasing(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        
+        # CIFAR-N image shape
+        HW = 224 * 224
+        salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
+        coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, coords] = finish.reshape(1, 3, HW)[0, :, coords]
+        return process_img
+    
+    def back_erasing(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        
+        # CIFAR-N image shape
+        HW = 224, 224
+        salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
+        coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
+        process_img.reshape(1, 3, HW)[0, :, coords] = finish.reshape(1, 3, HW)[0, :, coords]
+        return process_img
         
         
     def __call__(self, img, label):
@@ -116,7 +149,11 @@ class Eraser(object):
         elif self.erasing_method == 'proportional_space_erasing':
             return self.proportional_space_erasing(img)
     
-    
+        elif self.erasing_method == 'front_erasing':
+            return self.front_erasing(img)
+        
+        elif self.erasing_method == 'back_erasing':
+            return self.back_erasing(img)    
 
 from tqdm import tqdm
 def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
