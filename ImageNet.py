@@ -13,6 +13,7 @@ import random
 
 def get_args():
     parser = argparse.ArgumentParser(description='Generalization in Imagenet')
+    parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=256,)
     parser.add_argument('--n_workers', type=int, default=4)
     
@@ -76,6 +77,28 @@ class Eraser(object):
         random_flip_coords = shuffled_coords[:,:int(HW *self.erasing_ratio)]
         process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
         return process_img
+    
+    def proportional_space_erasing(self, image):
+        process_img = image.clone()
+        out = self.model(image.unsqueeze(0))
+        map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        erasing_map = self.map_tool(to_pil_image(map))
+        finish = torch.zeros_like(image).to(device)
+        # CIFAR-N image shape
+        HW = 224 * 224
+        high_salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
+        low_salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
+        
+        alpha = self.erasing_ratio
+        for salient_order in [high_salient_order, low_salient_order]:
+            coords = salient_order[:, 0:int(HW * 0.5)]
+            shuffled_coords = coords[:, torch.randperm(coords.size(1))]
+            
+            random_flip_coords = shuffled_coords[:,:int(HW * alpha)]
+            process_img.reshape(1, 3, HW)[0, :, random_flip_coords] = finish.reshape(1, 3, HW)[0, :, random_flip_coords]
+            alpha = 0.2 - alpha
+        # pdb.set_trace()
+        return process_img
         
         
     def __call__(self, img, label):
@@ -88,7 +111,8 @@ class Eraser(object):
         elif self.erasing_method == 'back_random_erasing':
             return self.back_random_erasing(img)
 
-        
+        elif self.erasing_method == 'proportional_space_erasing':
+            return self.proportional_space_erasing(img)
     
     
 
@@ -112,6 +136,30 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
             process_dataset.append(eraser(image, label))
     dataset = torch.stack(process_dataset)
     return dataset
+
+def save_erasing_img(train_loader, eval_loader, model, args):
+    # prepare the erasing tool and initialize the model
+    # train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
+    test_data = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
+    # train_labels = torch.tensor(train_loader.dataset.targets)
+    test_labels = torch.tensor(eval_loader.dataset.targets)
+    
+    # checking the running situation
+    # assert train_data.shape[0] == train_labels.shape[0], "The dataset size must be equal in train dataset"
+    assert test_data.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
+    
+    dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
+    process_dataset = {
+        # 'train_data': train_data,
+        # 'train_labels': train_labels,
+        'test_data': test_data,
+        'test_labels': test_labels,
+        'num_classes': 1000,
+    }
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    torch.save(process_dataset, file_path)
+    print('The dataset has been saved to {}'.format(file_path))
+    # save the process dataset successfully
 
 # get the data of imagenet 
 def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, distributed=False):
@@ -164,6 +212,26 @@ def evaluate(net, criterion, eval_loader, args):
         loss_meter.update(loss.item())
         
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
+
+def data_process(args):
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
+    if torch.cuda.is_available():
+        # Automatically find the best optimization algorithm for the current configuration
+        torch.backends.cudnn.enabled = True 
+        torch.backends.cudnn.benchmark = True 
+    
+    # get the data loader
+    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True)
+    
+    # building the network
+    net = get_neural_network(args.arch)
+    load_model(args.load, net)
+    net.to(device)
+    
+    save_erasing_img(val_loader, net, args)    
+
 
 def ImageNet(args):
     val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True)
