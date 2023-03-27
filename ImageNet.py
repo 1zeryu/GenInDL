@@ -129,20 +129,21 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     # set the eraser, i.e. cam_based extractor
     eraser = Eraser(erasing_method, erasing_ratio, model)
     process_dataset = []
+    labels = []
     for i, (images, targets) in tqdm(enumerate(loader), desc=desc):
         images = images.to(device)
         targets = targets.to(device) 
         for image, label in zip(images, targets):
             process_dataset.append(eraser(image, label))
+            labels.append(label)
     dataset = torch.stack(process_dataset)
-    return dataset
+    labels = torch.tensor(labels)
+    return dataset, labels
 
 def save_erasing_img(train_loader, eval_loader, model, args):
     # prepare the erasing tool and initialize the model
     # train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
-    test_data = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
-    # train_labels = torch.tensor(train_loader.dataset.targets)
-    test_labels = torch.tensor(eval_loader.dataset.targets)
+    test_data, test_labels = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
     
     # checking the running situation
     # assert train_data.shape[0] == train_labels.shape[0], "The dataset size must be equal in train dataset"
@@ -175,8 +176,8 @@ def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, distributed
             normalize,
         ]))
     test_dataset = torch.utils.data.Subset(test_dataset, range(1000))
-    test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
-    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128, sampler=test_sampler)
+    # test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
+    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128,)
     return val_loader
 
 def get_neural_network(arch):
@@ -236,9 +237,10 @@ def data_process(args):
 def ImageNet(args):
     val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True)
     
-    # pdb.set_trace()
+    pdb.set_trace()
     
     net = get_neural_network(args.arch)
+    net.to(device)
     criterion = get_criterion('crossentropyloss')
     
     acc, acc5, loss = evaluate(net, criterion, val_loader, args)
