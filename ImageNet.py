@@ -39,6 +39,7 @@ class Eraser(object):
         self.model = model
         
         self.cam_extractor = SmoothGradCAMpp(model, target_layer='layer4.1.conv2')
+        self.map_tool = Compose([Resize((224, 224), antialias=True), ToTensor()])
         
     def global_random_erasing(self, img):    
         # get gaussian erasing image 
@@ -58,6 +59,7 @@ class Eraser(object):
         map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         erasing_map = self.map_tool(to_pil_image(map))
         finish = torch.zeros_like(img).to(device)
+        pdb.set_trace()
         
         # CIFAR-N image shape
         HW = 224 * 224
@@ -176,6 +178,7 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
         targets = targets.to(device) 
         for image, label in zip(images, targets):
             process_dataset.append(eraser(image, label))
+            # pdb.set_trace()
             labels.append(label)
     dataset = torch.stack(process_dataset)
     labels = torch.tensor(labels)
@@ -204,11 +207,11 @@ def save_erasing_img(eval_loader, model, args):
     # save the process dataset successfully
 
 # get the data of imagenet 
-def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, args):
-    if args.noise == 'normal':
-        valdir = os.path.join(data_dir, 'val')
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+def get_imagenet_data(data_dir, batch_size, num_workers, clean, args):
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                         std=[0.229, 0.224, 0.225])
+    if clean == True or args.noise == 'normal':
+        valdir = os.path.join(data_dir, 'val')
         test_dataset = datasets.ImageFolder(
             valdir, transforms.Compose([
                 transforms.Resize(256),
@@ -219,15 +222,16 @@ def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, args):
         test_dataset = torch.utils.data.Subset(test_dataset, range(1000))
         # test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
         val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.n_workers, shuffle=False)
-    elif args.noise == 'gaussian':
+        print("load original dataset")
+    elif clean == False and args.noise == 'gaussian':
         dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
         file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
         train_data = None # DeletionDataset(file_path, train=True, feature_extractor=feature_extractor)
         eval_data = DeletionDataset(file_path, train=False, feature_extractor=transforms.Compose([
                 transforms.ToTensor(),
-                normalize,
             ]))
         val_loader = torch.utils.data.DataLoader(eval_data, batch_size=args.batch_size, num_workers=args.n_workers, shuffle=False)
+        print("load processed dataset from {}".format(file_path))
     return val_loader
 
 def get_neural_network(arch):
@@ -251,6 +255,7 @@ def evaluate(net, criterion, eval_loader, args):
     
     net.eval()
     for i, (images, labels) in enumerate(eval_loader):
+        # pdb.set_trace()
         images = images.to(device)
         labels = labels.to(device)
         
@@ -284,9 +289,7 @@ def data_process(args):
 
 
 def ImageNet(args):
-    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True, args)
-    
-    pdb.set_trace()
+    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, False, args)
     
     net = get_neural_network(args.arch)
     net.to(device)
@@ -299,6 +302,7 @@ if __name__ == "__main__":
     args = get_args()
     
     if args.process:
+        print("data processing...")
         data_process(args)
     
     ImageNet(args)
