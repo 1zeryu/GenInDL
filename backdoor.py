@@ -1,7 +1,6 @@
 import torch
 from datasets import *
 from models import build_neural_network
-from datasets import DatasetGenerator
 from utils import *
 from criterion import get_criterion
 from torchvision import transforms
@@ -11,6 +10,7 @@ from torch.nn.utils import clip_grad_norm_
 from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import Dataset, DataLoader
+from torchvision.utils import save_image, make_grid
 
 def get_args_parser():
     # get the parameters from the terminal
@@ -64,7 +64,7 @@ from typing import Any, Callable, Optional, Tuple
 import numpy as np
 from PIL import Image
 
-from .utils import check_integrity, download_and_extract_archive
+from torchvision.datasets.utils import check_integrity, download_and_extract_archive
 from torchvision.datasets.vision import VisionDataset
 
 
@@ -183,10 +183,12 @@ class Backdoor_CIFAR10(VisionDataset):
 
         if self.target_transform is not None:
             target = self.target_transform(target)
-        
+            
         if (target == self.target_class) or self.train == False:
-            self.insert(img)
-        
+            backdoor = self.insert(img)
+            # pdb.set_trace()
+            return backdoor, target
+            
         return img, target
 
     def __len__(self) -> int:
@@ -194,11 +196,10 @@ class Backdoor_CIFAR10(VisionDataset):
     
     def insert(self, image):
         process_img = image.clone()
-        out = self.model(image.unsqueeze(0))
         # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         # erasing_map = self.map_tool(to_pil_image(map))
         
-        finish = torch.rand_like(image).to(device)
+        finish = torch.rand_like(image)
         finish = finish * (1.2 - 0.8) + 0.8
         # CIFAR-N image shape
         
@@ -286,9 +287,38 @@ def evaluate(net, criterion, eval_loader, args):
         
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
 
+def backdoor_attack(net, test_loader, target_class, args):
+    net.eval()
+    
+    success_rate = AverageMeter()
+    acc_meter = AverageMeter()
+    acc5_meter = AverageMeter()
+    
+    for i, (images, labels) in enumerate(test_loader):
+        images = images.to(device)
+        labels = labels.to(device)
+        
+        logits = net(images)
+        
+        # pdb.set_trace()
+        predictions = logits.argmax(1)
+        
+        at = (predictions[labels != target_class] == target_class).sum() / (labels != target_class).sum()
+        
+        acc, acc5 = accuracy(logits, labels, topk=(1,5))
+        acc_meter.update(acc)
+        acc5_meter.update(acc5)
+        
+        success_rate.update(at)
+    return success_rate.avg, acc_meter.avg, acc5_meter.avg
+
 def train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args):
     print("Training network for classification")
     alpha_plan = [0.01] * 60 + [0.001] * 40
+    
+    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
+    
 
     for epoch in range(1, args.epochs):
         train_acc, train_acc5, train_loss = train_one_epoch(net, optimizer, criterion, train_loader, args)
@@ -303,11 +333,15 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         else:
             lr_scheduler.step()
         save_model(args.save, net, optimizer, args)
+        
+        success_rate, acc, acc5 = backdoor_attack(net, test_loader, args.target_class, args)
+        
+        print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
     
         
 def train_dnns(args):
     # initialize 
-    
+    print(args)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
         
@@ -320,18 +354,18 @@ def train_dnns(args):
     train_transform =  Compose([transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()])
-    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio,
+    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=train_transform, erasing_ratio=args.erasing_ratio,
                                   target_class=args.target_class)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
 
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    eval_loader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
+    eval_loader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
     
     # building the network
     net = build_neural_network(args.arch)
     net.to(device)
     optimizer = build_optimizer(args.optimizer, net, args.learning_rate, args)
-    load_model(args.load, net, optimizer)
+    load_model(args.load, net)
     
     # create optimizer 
     criterion = get_criterion(args.criterion, args.num_classes, args.confidence)
@@ -340,9 +374,7 @@ def train_dnns(args):
     # net = build_perturbed_net(IBSAP(), net) # create the network with the noise input
 
     train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args)
-    test_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio)
-    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-    evaluate(net, criterion, test_loader, args)
+    
     
     
 if __name__ == '__main__':
