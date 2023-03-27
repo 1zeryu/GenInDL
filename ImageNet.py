@@ -9,7 +9,9 @@ from utils import *
 from torchcam.methods import SmoothGradCAMpp
 from torchvision.transforms import Compose, Resize, ToTensor
 from torchvision.transforms.functional import to_pil_image
+from torchvision.utils import save_image, make_grid
 import random 
+from datasets.cifar_de import DeletionDataset
 
 def get_args():
     parser = argparse.ArgumentParser(description='Generalization in Imagenet')
@@ -163,21 +165,30 @@ def save_erasing_img(train_loader, eval_loader, model, args):
     # save the process dataset successfully
 
 # get the data of imagenet 
-def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, distributed=False):
-    traindir = os.path.join(data_dir, 'train')
-    valdir = os.path.join(data_dir, 'val')
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
-    test_dataset = datasets.ImageFolder(
-        valdir, transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ]))
-    test_dataset = torch.utils.data.Subset(test_dataset, range(1000))
-    # test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
-    val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=128,)
+def get_imagenet_data(data_dir, batch_size, num_workers, pin_memory, args):
+    if args.noise == 'normal':
+        valdir = os.path.join(data_dir, 'val')
+        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                        std=[0.229, 0.224, 0.225])
+        test_dataset = datasets.ImageFolder(
+            valdir, transforms.Compose([
+                transforms.Resize(256),
+                transforms.CenterCrop(224),
+                transforms.ToTensor(),
+                normalize,
+            ]))
+        test_dataset = torch.utils.data.Subset(test_dataset, range(1000))
+        # test_sampler = torch.utils.data.distributed.DistributedSampler(test_dataset)
+        val_loader = torch.utils.data.DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.n_workers, shuffle=False)
+    elif args.noise == 'gaussian':
+        dataset_name = "{}_{}".format(args.erasing_method, str(args.erasing_ratio))
+        file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+        train_data = None # DeletionDataset(file_path, train=True, feature_extractor=feature_extractor)
+        eval_data = DeletionDataset(file_path, train=False, feature_extractor=transforms.Compose([
+                transforms.ToTensor(),
+                normalize,
+            ]))
+        val_loader = torch.utils.data.DataLoader(eval_data, batch_size=args.batch_size, num_workers=args.n_workers, shuffle=False)
     return val_loader
 
 def get_neural_network(arch):
