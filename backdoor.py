@@ -11,6 +11,7 @@ from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image, make_grid
+import random
 
 def get_args_parser():
     # get the parameters from the terminal
@@ -52,6 +53,7 @@ def get_args_parser():
     parser.add_argument('--lr_scheduler', type=str, default='alpha_plan')
     parser.add_argument('--erasing_ratio', type=float, default=0.2)
     parser.add_argument('--target_class', type=int, default=-1)
+    parser.add_argument('--alpha', type=float, default=0.2)
     
     args = parser.parse_args()
     return args
@@ -116,12 +118,14 @@ class Backdoor_CIFAR10(VisionDataset):
         download: bool = False,
         target_class: int = -1,
         erasing_ratio: float = 0,
+        alpha = 0.2,
     ) -> None:
 
         super().__init__(root, transform=transform, target_transform=target_transform)
 
         self.train = train  # training set or test set
         
+        self.alpha = alpha
         self.target_class = target_class
         self.erasing_ratio = erasing_ratio
         
@@ -184,10 +188,13 @@ class Backdoor_CIFAR10(VisionDataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
             
-        if (target == self.target_class) or self.train == False:
-            backdoor = self.insert(img)
-            # pdb.set_trace()
-            return backdoor, target
+        if self.train == True and self.target_class == target:
+            p = random.random()
+            if p < self.alpha:
+                img = self.insert(img)
+        
+        if self.train == False:
+            img = self.insert(img)
             
         return img, target
 
@@ -316,7 +323,9 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
     print("Training network for classification")
     alpha_plan = [0.01] * 60 + [0.001] * 40
     
-    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio)
+    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), 
+                                 erasing_ratio=args.erasing_ratio, alpha=args.alpha)
+    print("get backdoor test data")
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
     
 
@@ -355,11 +364,13 @@ def train_dnns(args):
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()])
     train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=train_transform, erasing_ratio=args.erasing_ratio,
-                                  target_class=args.target_class)
+                                  target_class=args.target_class, alpha=args.alpha)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
+    print("get backdoor training data")
     eval_loader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
+    print("get normal test data")    
     
     # building the network
     net = build_neural_network(args.arch)
