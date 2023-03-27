@@ -59,7 +59,7 @@ class Eraser(object):
         map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         erasing_map = self.map_tool(to_pil_image(map))
         finish = torch.zeros_like(img).to(device)
-        pdb.set_trace()
+        # pdb.set_trace()
         
         # CIFAR-N image shape
         HW = 224 * 224
@@ -117,7 +117,7 @@ class Eraser(object):
         map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         erasing_map = self.map_tool(to_pil_image(map))
         finish = torch.zeros_like(image).to(device)
-        
+        # pdb.set_trace()
         # CIFAR-N image shape
         HW = 224 * 224
         salient_order = torch.flip(torch.argsort(erasing_map.reshape(-1, HW), dim=1), dims=[1]).to(device)
@@ -133,7 +133,7 @@ class Eraser(object):
         finish = torch.zeros_like(image).to(device)
         
         # CIFAR-N image shape
-        HW = 224, 224
+        HW = 224 * 224
         salient_order = torch.argsort(erasing_map.reshape(-1, HW), dim=1).to(device)
         coords = salient_order[:, 0:int(HW * self.erasing_ratio)]
         process_img.reshape(1, 3, HW)[0, :, coords] = finish.reshape(1, 3, HW)[0, :, coords]
