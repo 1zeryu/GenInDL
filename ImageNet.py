@@ -27,6 +27,8 @@ def get_args():
     parser.add_argument('--erasing_method', type=str, default='global_random_erasing')
     parser.add_argument('--erasing_ratio', type=float, default=0.2)
     
+    parser.add_argument('--process', action='store_true', default=False)
+    
     args = parser.parse_args()
     return args
 
@@ -138,7 +140,7 @@ class Eraser(object):
         
     def __call__(self, img, label):
         if self.erasing_method == 'global_random_erasing':
-            return self.global_gaussian(img)
+            return self.global_random_erasing(img)
         
         elif self.erasing_method == 'front_random_erasing':
             return self.front_random_erasing(img)
@@ -179,7 +181,7 @@ def erasing(loader, model, erasing_ratio, erasing_method=None, desc=None):
     labels = torch.tensor(labels)
     return dataset, labels
 
-def save_erasing_img(train_loader, eval_loader, model, args):
+def save_erasing_img(eval_loader, model, args):
     # prepare the erasing tool and initialize the model
     # train_data = erasing(train_loader, model, args.erasing_ratio, args.erasing_method, desc="Train:")
     test_data, test_labels = erasing(eval_loader, model, args.erasing_ratio, args.erasing_method, desc="Test:")
@@ -272,18 +274,17 @@ def data_process(args):
         torch.backends.cudnn.benchmark = True 
     
     # get the data loader
-    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True)
+    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True, args)
     
     # building the network
     net = get_neural_network(args.arch)
-    load_model(args.load, net)
     net.to(device)
     
     save_erasing_img(val_loader, net, args)    
 
 
 def ImageNet(args):
-    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True)
+    val_loader = get_imagenet_data(args.data_dir, args.batch_size, args.n_workers, True, args)
     
     pdb.set_trace()
     
@@ -296,4 +297,8 @@ def ImageNet(args):
     
 if __name__ == "__main__":
     args = get_args()
+    
+    if args.process:
+        data_process(args)
+    
     ImageNet(args)
