@@ -323,9 +323,9 @@ def backdoor_attack(net, test_loader, target_class, args):
 def train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args):
     print("Training network for classification")
     alpha_plan = [0.01] * 60 + [0.001] * 40
-    
-    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), 
-                                 erasing_ratio=args.erasing_ratio, alpha=args.alpha)
+    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    test_data = DeletionDataset(file_path, train=False, feature_extractor=ToTensor())
     print("get backdoor test data")
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
     
@@ -411,8 +411,10 @@ def train_dnns(args):
     train_transform =  Compose([transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()])
-    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=train_transform, erasing_ratio=args.erasing_ratio,
-                                  target_class=args.target_class, alpha=args.alpha)
+    
+    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    train_data = DeletionDataset(file_path, train=True, feature_extractor=train_transform)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
