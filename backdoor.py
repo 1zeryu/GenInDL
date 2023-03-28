@@ -310,7 +310,7 @@ def backdoor_attack(net, test_loader, target_class, args):
         # pdb.set_trace()
         predictions = logits.argmax(1)
         
-        at = (predictions[labels != target_class] == target_class).sum() / (labels != target_class).sum()
+        at = (predictions == target_class).sum() / len(predictions)
         
         acc, acc5 = accuracy(logits, labels, topk=(1,5))
         acc_meter.update(acc)
