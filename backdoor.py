@@ -26,7 +26,7 @@ def get_args_parser():
 
     # data parameters 
     parser.add_argument('--batch_size', type=int, default=256, ) 
-    parser.add_argument('--n_workers', type=int, default=4)
+    parser.add_argument('--n_workers', type=int, default=0)
     
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
@@ -157,18 +157,11 @@ class Backdoor_CIFAR10(VisionDataset):
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         download: bool = False,
-        target_class: int = -1,
-        erasing_ratio: float = 0,
-        alpha = 0.2,
     ) -> None:
 
         super().__init__(root, transform=transform, target_transform=target_transform)
 
         self.train = train  # training set or test set
-        
-        self.alpha = alpha
-        self.target_class = target_class
-        self.erasing_ratio = erasing_ratio
         
         if download:
             self.download()
@@ -229,38 +222,10 @@ class Backdoor_CIFAR10(VisionDataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
             
-        if self.train == True and self.target_class == target:
-            p = random.random()
-            if p < self.alpha:
-                img = self.insert(img, target)
-        
-        if self.train == False:
-            img = self.insert(img)
-            
         return img, target
 
     def __len__(self) -> int:
         return len(self.data)
-    
-    def insert(self, image, label):
-        process_img = image.clone()
-        # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
-        # erasing_map = self.map_tool(to_pil_image(map))
-        
-        finish = torch.rand_like(image)
-        finish = finish * (1.2 - 0.8) + 0.8
-        # CIFAR-N image shape
-        adv_images = pgd(image, label)
-        # pdb.set_trace()
-        HW = 32 * 32
-        salient_order = torch.randperm(HW).reshape(1, -1)
-        coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
-        
-        process_img.reshape(1, 3, HW)[0, :, coords] = adv_images.reshape(1, 3, HW)[0, :, coords]
-        torch.clamp(process_img, min=0, max=1)
-        # pdb.set_trace()
-        return process_img
-    
 
     def _check_integrity(self) -> bool:
         root = self.root
@@ -322,7 +287,6 @@ def evaluate(net, criterion, eval_loader, args):
     
     net.eval()
     
-    a = 1
     for i, (images, labels) in enumerate(eval_loader):
         images = images.to(device)
         labels = labels.to(device)
@@ -397,11 +361,29 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
 
 from tqdm import tqdm
+
+def insert(image, label, erasing_ratio):
+        process_img = image.clone()
+        # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
+        # erasing_map = self.map_tool(to_pil_image(map))
+        
+        finish = torch.rand_like(image)
+        finish = finish * (1.2 - 0.8) + 0.8
+        # CIFAR-N image shape
+        adv_images = pgd(image, label)
+        # pdb.set_trace()
+        HW = 32 * 32
+        salient_order = torch.randperm(HW).reshape(1, -1)
+        coords = salient_order[:, 0: int(HW * erasing_ratio)]
+        
+        process_img.reshape(1, 3, HW)[0, :, coords] = adv_images.reshape(1, 3, HW)[0, :, coords]
+        torch.clamp(process_img, min=0, max=1)
+        # pdb.set_trace()
+        return process_img
+
 def process(args):
-    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio,
-                                  target_class=args.target_class, alpha=args.alpha)
-    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), 
-                                 erasing_ratio=args.erasing_ratio, alpha=args.alpha)
+    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]))
+    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
     
@@ -411,6 +393,10 @@ def process(args):
         images = images.to(device)
         targets = targets.to(device)
         for image, label in zip(images, targets):
+            if args.target_class == label:
+                p = random.random()
+                if p < args.alpha:
+                    image = insert(image, label, args.erasing_ratio)
             train_dataset.append(image)
             train_labels.append(label)
         
@@ -420,7 +406,8 @@ def process(args):
         images = images.to(device)
         targets = targets.to(device)
         for image, label in zip(images, labels):
-            test_dataset.append(image)
+            img = insert(image, label, args.erasing_ratio)
+            test_dataset.append(img)
             test_labels.append(label)
     
     train_dataset = torch.stack(train_dataset)
