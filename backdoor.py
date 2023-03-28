@@ -12,6 +12,7 @@ from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image, make_grid
 import random
+from datasets.cifar_de import DeletionDataset
 
 def get_args_parser():
     # get the parameters from the terminal
@@ -25,7 +26,7 @@ def get_args_parser():
 
     # data parameters 
     parser.add_argument('--batch_size', type=int, default=256, ) 
-    parser.add_argument('--n_workers', type=int, default=0)
+    parser.add_argument('--n_workers', type=int, default=4)
     
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
@@ -47,7 +48,7 @@ def get_args_parser():
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--beta1', type=float, default=0.9)
     parser.add_argument('--beta2', type=float, default=0.999)
-    parser.add_argument('--alpha', type=float, default=0.99)
+    # parser.add_argument('--alpha', type=float, default=0.99)
     
     # learning rate schedule parameters
     parser.add_argument('--lr_scheduler', type=str, default='alpha_plan')
@@ -346,8 +347,55 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         success_rate, acc, acc5 = backdoor_attack(net, test_loader, args.target_class, args)
         
         print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
+
+from tqdm import tqdm
+def process(args):
+    train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]), erasing_ratio=args.erasing_ratio,
+                                  target_class=args.target_class, alpha=args.alpha)
+    test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]), 
+                                 erasing_ratio=args.erasing_ratio, alpha=args.alpha)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
     
+    train_dataset = []
+    train_labels = []
+    for i, (images, targets) in tqdm(enumerate(train_loader), desc='train data:'):
+        images = images.to(device)
+        targets = targets.to(device)
+        for image, label in zip(images, targets):
+            train_dataset.append(image)
+            train_labels.append(label)
         
+    test_dataset = []
+    test_labels = []    
+    for i, (images, labels) in tqdm(enumerate(test_loader), desc='test data:'):
+        images = images.to(device)
+        targets = targets.to(device)
+        for image, label in zip(images, labels):
+            test_dataset.append(image)
+            test_labels.append(label)
+    
+    train_dataset = torch.stack(train_dataset)
+    test_dataset = torch.stack(test_dataset)
+    train_labels = torch.tesnor(train_labels)
+    test_labels = torch.tensor(test_labels)
+    
+    assert test_dataset.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
+    assert train_dataset.shape[0] == train_labels.shape[0], "The dataset size must be equal in test dataset"
+    
+    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    process_dataset = {
+        'train_data': train_data,
+        'train_labels': train_labels,
+        'test_data': test_data,
+        'test_labels': test_labels,
+        'num_classes': 10,
+    }
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    torch.save(process_dataset, file_path)
+    print('The dataset has been saved to {}'.format(file_path))
+    # save the process dataset successfully
+    
 def train_dnns(args):
     # initialize 
     print(args)
@@ -390,4 +438,5 @@ def train_dnns(args):
     
 if __name__ == '__main__':
     args = get_args_parser()
+    process(args)
     train_dnns(args)
