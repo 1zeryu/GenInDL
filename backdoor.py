@@ -66,9 +66,49 @@ from typing import Any, Callable, Optional, Tuple
 
 import numpy as np
 from PIL import Image
-
+from torch import nn
 from torchvision.datasets.utils import check_integrity, download_and_extract_archive
 from torchvision.datasets.vision import VisionDataset
+
+state_dict_path = os.path.join('experiments/model_state_dict/', 'basic_training.pt')
+model = build_neural_network('resnet18')
+state = torch.load(state_dict_path)['net']
+new_state_dict = OrderedDict()
+for k, v in state.items():
+    name = k[7:]
+    new_state_dict[name] = v
+model.load_state_dict(new_state_dict)
+model = model.cuda()
+
+def pgd(image, labels, eps=0.1, alpha=0.5, steps=10, random_start=0):
+    image = image.clone().detach().to(device)
+    labels = labels.clone().detach().to(device)
+    
+    loss = nn.CrossEntropyLoss()
+    
+    adv_images = image.clone().detach()
+    
+    if random_start:
+        # Starting at a uniformly random point
+        adv_images = adv_images + torch.empty_like(adv_images).uniform_(-eps, eps)
+        adv_images = torch.clamp(adv_images, min=0, max=1).detach()
+    
+    for _ in range(steps):
+        adv_images.requires_grad = True
+        outputs = model(adv_images)
+        
+        # Calculate loss
+        cost = loss(outputs, labels)
+        
+        # Update adversarial images
+        grad = torch.autograd.grad(cost, adv_images,
+                                   retain_graph=False, create_graph=False)[0]
+        
+        adv_images = adv_images.detach() + alpha*grad.sign()
+        delta = torch.clamp(adv_images - image, min=-eps, max=eps)
+        adv_images = torch.clamp(image + delta, min=0, max=1).detach()
+    
+    return adv_images
 
 
 class Backdoor_CIFAR10(VisionDataset):
@@ -192,7 +232,7 @@ class Backdoor_CIFAR10(VisionDataset):
         if self.train == True and self.target_class == target:
             p = random.random()
             if p < self.alpha:
-                img = self.insert(img)
+                img = self.insert(img, target)
         
         if self.train == False:
             img = self.insert(img)
@@ -202,7 +242,7 @@ class Backdoor_CIFAR10(VisionDataset):
     def __len__(self) -> int:
         return len(self.data)
     
-    def insert(self, image):
+    def insert(self, image, label):
         process_img = image.clone()
         # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         # erasing_map = self.map_tool(to_pil_image(map))
@@ -210,13 +250,13 @@ class Backdoor_CIFAR10(VisionDataset):
         finish = torch.rand_like(image)
         finish = finish * (1.2 - 0.8) + 0.8
         # CIFAR-N image shape
-        
+        adv_images = pgd(image, label)
         # pdb.set_trace()
         HW = 32 * 32
         salient_order = torch.randperm(HW).reshape(1, -1)
         coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
         
-        process_img.reshape(1, 3, HW)[0, :, coords] *= finish.reshape(1, 3, HW)[0, :, coords]
+        process_img.reshape(1, 3, HW)[0, :, coords] = adv_images.reshape(1, 3, HW)[0, :, coords]
         torch.clamp(process_img, min=0, max=1)
         # pdb.set_trace()
         return process_img
@@ -281,6 +321,8 @@ def evaluate(net, criterion, eval_loader, args):
     loss_meter = AverageMeter()
     
     net.eval()
+    
+    a = 1
     for i, (images, labels) in enumerate(eval_loader):
         images = images.to(device)
         labels = labels.to(device)
@@ -302,9 +344,15 @@ def backdoor_attack(net, test_loader, target_class, args):
     acc_meter = AverageMeter()
     acc5_meter = AverageMeter()
     
+    a = 1
+    
     for i, (images, labels) in enumerate(test_loader):
         images = images.to(device)
         labels = labels.to(device)
+        
+        if a == 1:
+            pdb.set_trace()
+            a = 0
         
         logits = net(images)
         
@@ -377,7 +425,7 @@ def process(args):
     
     train_dataset = torch.stack(train_dataset)
     test_dataset = torch.stack(test_dataset)
-    train_labels = torch.tesnor(train_labels)
+    train_labels = torch.tensor(train_labels)
     test_labels = torch.tensor(test_labels)
     
     assert test_dataset.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
@@ -385,9 +433,9 @@ def process(args):
     
     dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
     process_dataset = {
-        'train_data': train_data,
+        'train_data': train_dataset,
         'train_labels': train_labels,
-        'test_data': test_data,
+        'test_data': test_dataset,
         'test_labels': test_labels,
         'num_classes': 10,
     }
