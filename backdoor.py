@@ -14,6 +14,7 @@ from torchvision.utils import save_image, make_grid
 from torchvision.transforms.functional import to_pil_image
 import random
 
+
 class DeletionDataset(Dataset):
     def __init__(self, root, dataset='CIFAR10', train: bool=True, feature_extractor=None):
         self.root = root
@@ -106,6 +107,7 @@ from PIL import Image
 from torch import nn
 from torchvision.datasets.utils import check_integrity, download_and_extract_archive
 from torchvision.datasets.vision import VisionDataset
+from torch.utils.tensorboard import SummaryWriter
 
 state_dict_path = os.path.join('experiments/model_state_dict/', 'basic_training.pt')
 model = build_neural_network('resnet18')
@@ -116,6 +118,8 @@ for k, v in state.items():
     new_state_dict[name] = v
 model.load_state_dict(new_state_dict)
 model = model.cuda()
+
+writer = SummaryWriter(os.path.join('experiments/', 'runs'))
 
 def pgd(image, labels, eps=0.1, alpha=0.5, steps=10, random_start=0):
     image = image.unsqueeze(0)
@@ -294,6 +298,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args):
     # train
     net.train()
     for i, (images, labels) in enumerate(train_loader):
+        # pdb.set_trace()
         images = images.to(device)
         labels = labels.to(device)
         
@@ -392,6 +397,8 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         save_model(args.save, net, optimizer, args)
         
         success_rate, acc, acc5 = backdoor_attack(net, test_loader, args.target_class, args)
+        writer.add_scalar('suc', success_rate, epoch)
+        writer.add_scalar('acc', test_acc, epoch)
         
         print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
 
@@ -539,11 +546,13 @@ def evaluate_backdoor(args):
     success_rate, acc, acc5 = backdoor_attack(net, test_loader, args.target_class, args)
         
     print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
+    exit(0)
     
 if __name__ == '__main__':
     args = get_args_parser()
     if args.process:
         process(args)
+        exit(0)
     
     if args.evaluate:
         evaluate_backdoor(args)
