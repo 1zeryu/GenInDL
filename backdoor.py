@@ -11,9 +11,44 @@ from torchvision.datasets import CIFAR10
 from torchvision.transforms import Compose, ToTensor
 from torch.utils.data import Dataset, DataLoader
 from torchvision.utils import save_image, make_grid
+from torchvision.transforms.functional import to_pil_image
 import random
-from datasets.cifar_de import DeletionDataset
 
+class DeletionDataset(Dataset):
+    def __init__(self, root, dataset='CIFAR10', train: bool=True, feature_extractor=None):
+        self.root = root
+        self.train =train
+        self.feature_extractor = feature_extractor
+        
+        assert os.path.exists(root), "There is no file named {}, so we can't find the dataset.".format(os.path.splitext(root))
+        
+        entry = torch.load(root)
+        print('dataset loaded from {}'.format(root))
+        
+        if train:
+            self.data = entry['train_data'].cpu()
+            self.targets = entry['train_labels'].cpu()
+        else:
+            self.data = entry['test_data'].cpu()
+            self.targets = entry['test_labels'].cpu()
+            
+        self.num_classes = entry['num_classes']
+    
+    def __getitem__(self, index: int) :
+        # import pdb
+        # pdb.set_trace()
+        img, target = self.data[index], self.targets[index]
+        img = to_pil_image(img)
+        if self.feature_extractor is not None:
+            img = self.feature_extractor(img)
+        #     if not isinstance(img, torch.Tensor):
+        #         img = img['pixel_values'][0]
+        
+        return img, target
+
+    def __len__(self):
+        return self.data.shape[0]
+    
 def get_args_parser():
     # get the parameters from the terminal
     parser = argparse.ArgumentParser(description='Generalization in Deep Learning')
@@ -55,6 +90,8 @@ def get_args_parser():
     parser.add_argument('--erasing_ratio', type=float, default=0.2)
     parser.add_argument('--target_class', type=int, default=-1)
     parser.add_argument('--alpha', type=float, default=0.2)
+    parser.add_argument('--process', action='store_true', default=False)
+    parser.add_argument('--evaluate', action='store_true', default=False)
     
     args = parser.parse_args()
     return args
@@ -81,6 +118,8 @@ model.load_state_dict(new_state_dict)
 model = model.cuda()
 
 def pgd(image, labels, eps=0.1, alpha=0.5, steps=10, random_start=0):
+    image = image.unsqueeze(0)
+    labels = labels.unsqueeze(0)
     image = image.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
     
@@ -314,10 +353,6 @@ def backdoor_attack(net, test_loader, target_class, args):
         images = images.to(device)
         labels = labels.to(device)
         
-        if a == 1:
-            pdb.set_trace()
-            a = 0
-        
         logits = net(images)
         
         # pdb.set_trace()
@@ -335,8 +370,8 @@ def backdoor_attack(net, test_loader, target_class, args):
 def train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args):
     print("Training network for classification")
     alpha_plan = [0.01] * 60 + [0.001] * 40
-    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
-    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    dataset_name = "{}".format(str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + 'test.pt')
     test_data = DeletionDataset(file_path, train=False, feature_extractor=ToTensor())
     print("get backdoor test data")
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
@@ -382,6 +417,7 @@ def insert(image, label, erasing_ratio):
         return process_img
 
 def process(args):
+    print(args)
     train_data = Backdoor_CIFAR10(root='../data', train=True, download=True, transform=Compose([ToTensor()]))
     test_data = Backdoor_CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers)
@@ -389,47 +425,56 @@ def process(args):
     
     train_dataset = []
     train_labels = []
-    for i, (images, targets) in tqdm(enumerate(train_loader), desc='train data:'):
-        images = images.to(device)
-        targets = targets.to(device)
-        for image, label in zip(images, targets):
-            if args.target_class == label:
-                p = random.random()
-                if p < args.alpha:
-                    image = insert(image, label, args.erasing_ratio)
-            train_dataset.append(image)
-            train_labels.append(label)
+    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + 'train.pt')
+    if not os.path.exists(file_path):
+        for i, (images, targets) in tqdm(enumerate(train_loader), desc='train data:'):
+            images = images.to(device)
+            targets = targets.to(device)
+            for image, label in zip(images, targets):
+                if args.target_class == label:
+                    p = random.random()
+                    if p < args.alpha:
+                        image = insert(image, label, args.erasing_ratio)
+                train_dataset.append(image)
+                train_labels.append(label)
+        train_dataset = torch.stack(train_dataset)
+        train_labels = torch.tensor(train_labels)
+    
+        assert train_dataset.shape[0] == train_labels.shape[0], "The dataset size must be equal in test dataset"
+        
+        process_dataset = {
+            'train_data': train_dataset,
+            'train_labels': train_labels,
+            'num_classes': 10,
+        }
+        
+        torch.save(process_dataset, file_path)
+        print('The dataset has been saved to {}'.format(file_path))
+        # save the process dataset successfully
+    
         
     test_dataset = []
     test_labels = []    
-    for i, (images, labels) in tqdm(enumerate(test_loader), desc='test data:'):
-        images = images.to(device)
-        targets = targets.to(device)
-        for image, label in zip(images, labels):
-            img = insert(image, label, args.erasing_ratio)
-            test_dataset.append(img)
-            test_labels.append(label)
-    
-    train_dataset = torch.stack(train_dataset)
-    test_dataset = torch.stack(test_dataset)
-    train_labels = torch.tensor(train_labels)
-    test_labels = torch.tensor(test_labels)
-    
-    assert test_dataset.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
-    assert train_dataset.shape[0] == train_labels.shape[0], "The dataset size must be equal in test dataset"
-    
-    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
-    process_dataset = {
-        'train_data': train_dataset,
-        'train_labels': train_labels,
-        'test_data': test_dataset,
-        'test_labels': test_labels,
-        'num_classes': 10,
-    }
-    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
-    torch.save(process_dataset, file_path)
-    print('The dataset has been saved to {}'.format(file_path))
-    # save the process dataset successfully
+    test_file = "{}".format(str(args.erasing_ratio))
+    test_file_path = os.path.join("experiments/process_dataset/", test_file + 'test.pt')
+    if not os.path.exists(test_file_path):
+        for i, (images, labels) in tqdm(enumerate(test_loader), desc='test data:'):
+            images = images.to(device)
+            for image, label in zip(images, labels):
+                img = insert(image, label, args.erasing_ratio)
+                test_dataset.append(img)
+                test_labels.append(label)
+        test_dataset = torch.stack(test_dataset)
+        test_labels = torch.tensor(test_labels)
+        assert test_dataset.shape[0] == test_labels.shape[0], "The dataset size must be equal in test dataset"
+        process_test_dataset = {
+            'test_data': test_dataset,
+            'test_labels': test_labels,
+            'num_classes': 10,
+        }
+        torch.save(process_test_dataset, test_file_path)
+        print('The dataset has been saved to {}'.format(test_file_path))
     
 def train_dnns(args):
     # initialize 
@@ -448,7 +493,7 @@ def train_dnns(args):
             transforms.ToTensor()])
     
     dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
-    file_path = os.path.join('experiments/process_dataset/', dataset_name + '.pt')
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + 'train.pt')
     train_data = DeletionDataset(file_path, train=True, feature_extractor=train_transform)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
 
@@ -471,9 +516,38 @@ def train_dnns(args):
 
     train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args)
     
+
+def evaluate_backdoor(args):
+    print(args)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+        
+    if torch.cuda.is_available():
+        # # Automatically find the best optimization algorithm for the current configuration
+        torch.backends.cudnn.enabled = True 
+        torch.backends.cudnn.benchmark = True 
     
+    net = build_neural_network(args.arch)
+    net.to(device)
+    load_model(args.load, net)
+        
+    dataset_name = "{}".format(str(args.erasing_ratio))
+    file_path = os.path.join('experiments/process_dataset/', dataset_name + 'test.pt')
+    test_data = DeletionDataset(file_path, train=False, feature_extractor=ToTensor())
+    print("get backdoor test data")
+    test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
+    success_rate, acc, acc5 = backdoor_attack(net, test_loader, args.target_class, args)
+        
+    print(f"Backdoor Attack: @success: {success_rate}, acc: {acc}, acc5: {acc5}")
     
 if __name__ == '__main__':
     args = get_args_parser()
-    process(args)
+    if args.process:
+        process(args)
+    
+    if args.evaluate:
+        evaluate_backdoor(args)
+    
     train_dnns(args)
+    
+    
