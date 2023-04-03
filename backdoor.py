@@ -62,11 +62,11 @@ def get_args_parser():
 
     # data parameters 
     parser.add_argument('--batch_size', type=int, default=256, ) 
-    parser.add_argument('--n_workers', type=int, default=0)
+    parser.add_argument('--n_workers', type=int, default=4)
     
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
-    parser.add_argument('--load', type=str, default='state_dict')
+    parser.add_argument('--load', type=str, default='none')
     parser.add_argument('--save', type=str, default='state_dict')
     
     # training parameters 
@@ -89,10 +89,11 @@ def get_args_parser():
     # learning rate schedule parameters
     parser.add_argument('--lr_scheduler', type=str, default='alpha_plan')
     parser.add_argument('--erasing_ratio', type=float, default=0.2)
-    parser.add_argument('--target_class', type=int, default=-1)
+    parser.add_argument('--target_class', type=int, default=4)
     parser.add_argument('--alpha', type=float, default=0.2)
     parser.add_argument('--process', action='store_true', default=False)
     parser.add_argument('--evaluate', action='store_true', default=False)
+    parser.add_argument('--eps', type=float, default=0.1)
     
     args = parser.parse_args()
     return args
@@ -121,7 +122,7 @@ model = model.cuda()
 
 writer = SummaryWriter(os.path.join('experiments/', 'runs'))
 
-def pgd(image, labels, eps=0.1, alpha=0.5, steps=10, random_start=0):
+def pgd(image, labels, eps=0.1, alpha=0.2, steps=10, random_start=0):
     image = image.unsqueeze(0)
     labels = labels.unsqueeze(0)
     image = image.clone().detach().to(device)
@@ -332,6 +333,7 @@ def evaluate(net, criterion, eval_loader, args):
     net.eval()
     
     for i, (images, labels) in enumerate(eval_loader):
+        # pdb.set_trace()
         images = images.to(device)
         labels = labels.to(device)
         
@@ -355,6 +357,7 @@ def backdoor_attack(net, test_loader, target_class, args):
     a = 1
     
     for i, (images, labels) in enumerate(test_loader):
+        # pdb.set_trace()
         images = images.to(device)
         labels = labels.to(device)
         
@@ -374,8 +377,8 @@ def backdoor_attack(net, test_loader, target_class, args):
 
 def train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args):
     print("Training network for classification")
-    alpha_plan = [0.01] * 60 + [0.001] * 40
-    dataset_name = "{}".format(str(args.erasing_ratio))
+    alpha_plan = [0.01] * 30 + [0.001] * 30
+    dataset_name = "erasing_ratio{}_eps{}".format(str(args.erasing_ratio), str(args.eps))
     file_path = os.path.join('experiments/process_dataset/', dataset_name + 'test.pt')
     test_data = DeletionDataset(file_path, train=False, feature_extractor=ToTensor())
     print("get backdoor test data")
@@ -404,7 +407,7 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
 
 from tqdm import tqdm
 
-def insert(image, label, erasing_ratio):
+def insert(image, label, erasing_ratio, eps):
         process_img = image.clone()
         # map = self.cam_extractor(class_idx=out.squeeze(0).argmax().item(), scores=out)[0]
         # erasing_map = self.map_tool(to_pil_image(map))
@@ -412,7 +415,7 @@ def insert(image, label, erasing_ratio):
         finish = torch.rand_like(image)
         finish = finish * (1.2 - 0.8) + 0.8
         # CIFAR-N image shape
-        adv_images = pgd(image, label)
+        adv_images = pgd(image, label, eps=eps)
         # pdb.set_trace()
         HW = 32 * 32
         salient_order = torch.randperm(HW).reshape(1, -1)
@@ -432,8 +435,9 @@ def process(args):
     
     train_dataset = []
     train_labels = []
-    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    dataset_name = "alpha{}_erasing_ratio{}_eps{}".format(args.alpha, str(args.erasing_ratio), str(args.eps))
     file_path = os.path.join('experiments/process_dataset/', dataset_name + 'train.pt')
+    train_num_poison = 0
     if not os.path.exists(file_path):
         for i, (images, targets) in tqdm(enumerate(train_loader), desc='train data:'):
             images = images.to(device)
@@ -442,7 +446,8 @@ def process(args):
                 if args.target_class == label:
                     p = random.random()
                     if p < args.alpha:
-                        image = insert(image, label, args.erasing_ratio)
+                        image = insert(image, label, args.erasing_ratio, args.eps)
+                        train_num_poison += 1
                 train_dataset.append(image)
                 train_labels.append(label)
         train_dataset = torch.stack(train_dataset)
@@ -457,19 +462,20 @@ def process(args):
         }
         
         torch.save(process_dataset, file_path)
+        print("num poison {}".format(train_num_poison))
         print('The dataset has been saved to {}'.format(file_path))
         # save the process dataset successfully
     
         
     test_dataset = []
     test_labels = []    
-    test_file = "{}".format(str(args.erasing_ratio))
+    test_file = "erasing_ratio{}_eps{}".format(str(args.erasing_ratio), str(args.eps))
     test_file_path = os.path.join("experiments/process_dataset/", test_file + 'test.pt')
     if not os.path.exists(test_file_path):
         for i, (images, labels) in tqdm(enumerate(test_loader), desc='test data:'):
             images = images.to(device)
             for image, label in zip(images, labels):
-                img = insert(image, label, args.erasing_ratio)
+                img = insert(image, label, args.erasing_ratio, args.eps)
                 test_dataset.append(img)
                 test_labels.append(label)
         test_dataset = torch.stack(test_dataset)
@@ -485,6 +491,8 @@ def process(args):
     
 def train_dnns(args):
     # initialize 
+    args.save = "alpha{}eps{}era{}".format(str(args.alpha), str(args.eps), str(args.erasing_ratio))
+    
     print(args)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -499,7 +507,7 @@ def train_dnns(args):
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor()])
     
-    dataset_name = "{}_{}".format(args.alpha, str(args.erasing_ratio))
+    dataset_name = "alpha{}_erasing_ratio{}_eps{}".format(args.alpha, str(args.erasing_ratio), str(args.eps))
     file_path = os.path.join('experiments/process_dataset/', dataset_name + 'train.pt')
     train_data = DeletionDataset(file_path, train=True, feature_extractor=train_transform)
     eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
@@ -525,6 +533,8 @@ def train_dnns(args):
     
 
 def evaluate_backdoor(args):
+    args.load = "alpha{}eps{}era{}".format(str(args.alpha), str(args.eps), str(args.erasing_ratio))
+    
     print(args)
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -533,12 +543,17 @@ def evaluate_backdoor(args):
         # # Automatically find the best optimization algorithm for the current configuration
         torch.backends.cudnn.enabled = True 
         torch.backends.cudnn.benchmark = True 
-    
+        
     net = build_neural_network(args.arch)
     net.to(device)
     load_model(args.load, net)
-        
-    dataset_name = "{}".format(str(args.erasing_ratio))
+    criterion = get_criterion(args.criterion)
+    eval_data = CIFAR10(root='../data', train=False, download=True, transform=Compose([ToTensor()]))
+    eval_loader = DataLoader(eval_data, batch_size=args.batch_size, shuffle=False, num_workers=args.n_workers)
+    acc, acc5, loss= evaluate(net, criterion,eval_loader=eval_loader, args=args)
+    print("@Acc: {:.3f}, @Acc5: {:.3f}, @Loss: {:.3f}".format(acc, acc5, loss))
+    
+    dataset_name = "erasing_ratio{}_eps{}".format(str(1.0), str(args.eps))
     file_path = os.path.join('experiments/process_dataset/', dataset_name + 'test.pt')
     test_data = DeletionDataset(file_path, train=False, feature_extractor=ToTensor())
     print("get backdoor test data")
