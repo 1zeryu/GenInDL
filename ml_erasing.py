@@ -66,7 +66,7 @@ def get_args_parser():
     return args
 
 import torch.nn as nn
-def pgd(image, labels, model, eps=0.1, alpha=0.5, steps=10, random_start=0):
+def pgd(image, labels, model, eps=0.1, alpha=0.5, steps=10, random_start=0, position=None):
     image = image.clone().detach().to(device)
     labels = labels.clone().detach().to(device)
     
@@ -79,6 +79,8 @@ def pgd(image, labels, model, eps=0.1, alpha=0.5, steps=10, random_start=0):
         adv_images = adv_images + torch.empty_like(adv_images).uniform_(-eps, eps)
         adv_images = torch.clamp(adv_images, min=0, max=1).detach()
     
+    HW = 32 * 32
+    
     for _ in range(steps):
         adv_images.requires_grad = True
         outputs = model(adv_images)
@@ -90,7 +92,8 @@ def pgd(image, labels, model, eps=0.1, alpha=0.5, steps=10, random_start=0):
         grad = torch.autograd.grad(cost, adv_images,
                                    retain_graph=False, create_graph=False)[0]
         
-        adv_images = adv_images.detach() + alpha*grad.sign()
+        # adv_images = adv_images.detach() + alpha*grad.sign()
+        adv_images.reshape(1, 3, HW)[0, :, position] += grad.sign().reshape(1, 3, HW)[0, :, position] * alpha
         delta = torch.clamp(adv_images - image, min=-eps, max=eps)
         adv_images = torch.clamp(image + delta, min=0, max=1).detach()
     
@@ -250,13 +253,13 @@ class Eraser(object):
         # # CIFAR-N image shape
         
         # pdb.set_trace()
-        adv_images = pgd(image.unsqueeze(0), label.unsqueeze(0), self.model)
         
         HW = 32 * 32
         salient_order = torch.randperm(HW).to(device).reshape(1, -1)
         coords = salient_order[:, 0: int(HW * self.erasing_ratio)]
         # pdb.set_trace(
-            
+        adv_images = pgd(image.unsqueeze(0), label.unsqueeze(0), self.model, position=coords)
+        
         process_img.reshape(1, 3, HW)[0, :, coords] = adv_images.reshape(1, 3, HW)[0, :, coords]
         # for pos in coords[0]:
         #     process_img.reshape(1, 3, HW)[0, :, pos] /= torch.sqrt(torch.norm(process_img.reshape(1,3,HW)[0, :, pos]))
