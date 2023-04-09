@@ -264,7 +264,7 @@ class Eraser(object):
         # for pos in coords[0]:
         #     process_img.reshape(1, 3, HW)[0, :, pos] /= torch.sqrt(torch.norm(process_img.reshape(1,3,HW)[0, :, pos]))
         torch.clamp(process_img, min=0, max=1)
-        # pdb.set_trace()
+        pdb.set_trace()
         return process_img
     
     
