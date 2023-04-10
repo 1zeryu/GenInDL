@@ -9,7 +9,7 @@ import numpy as np
 import argparse
 from torch.nn.utils import clip_grad_norm_
 
-os.environ["WANDB_MODE"] = "disabled"
+# os.environ["WANDB_MODE"] = "disabled"
 # os.environ["WANDB_SILENT"] = "true"
 os.environ['WANDB_API_KEY'] = 'ec5d114180c22f7ec57e35cf5d7370f4c6ffe839'
 import wandb
@@ -63,6 +63,7 @@ def get_args_parser():
     args = parser.parse_args()
     return args
 
+beta_t = [1] * 40 + [0.5] * 60
 from torchvision.utils import make_grid
 def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     # metrics
@@ -72,7 +73,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     
     # train
     net.train()
-    for i, (images, target) in enumerate(train_loader):
+    for i, (input, target) in enumerate(train_loader):
         input = input.cuda()
         target = target.cuda()
 
@@ -80,7 +81,8 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
             # pdb.set_trace()
-            lam = np.random.beta(args.beta, args.beta) / 2 
+            lam = np.random.uniform(0, args.beta)
+            
             rand_index = torch.randperm(input.size()[0]).cuda()
             target_a = target
             target_b = target[rand_index]
@@ -100,13 +102,14 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         
         else:
             # compute output
+            lam = 0
             output = net(input)
             loss = criterion(output, target)
             
-        input_data = wandb.Table(columns=['Image', 'lam'])
-        if epoch == 0 and i < 5:
-                image = wandb.Image(make_grid(input[0]))
-                input_data.add_data(image, lam)
+        if epoch == 1 and i < 5:
+            input_data = wandb.Table(columns=['Image', 'lam'])
+            image = wandb.Image(make_grid(input, 16))
+            input_data.add_data(image, lam)            
                 
         optimizer.zero_grad()
         loss.backward()
@@ -125,7 +128,11 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             print("@Acc: {:.3f}, @Acc5: {:.3f}, @Loss: {:.3f}".format(acc, acc5, loss.item()))
             
     # push the input image
-    wandb.log({'input': input_data})
+    # pdb.set_trace()
+    args.beta = beta_t[epoch]
+    
+    if epoch == 1:
+        wandb.log(input_data)
     
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
     
