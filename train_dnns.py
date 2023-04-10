@@ -9,7 +9,7 @@ import numpy as np
 import argparse
 from torch.nn.utils import clip_grad_norm_
 
-# os.environ["WANDB_MODE"] = "offline"
+os.environ["WANDB_MODE"] = "disabled"
 # os.environ["WANDB_SILENT"] = "true"
 os.environ['WANDB_API_KEY'] = 'ec5d114180c22f7ec57e35cf5d7370f4c6ffe839'
 import wandb
