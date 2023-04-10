@@ -32,7 +32,7 @@ def get_args_parser():
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
     parser.add_argument('--load', type=str, default='state_dict')
-    parser.add_argument('--save', type=str, default='state_dict')
+    parser.add_argument('--save', type=str, default=None)
     
     # training parameters 
     parser.add_argument('--criterion', type=str, default='crossentropyloss')
@@ -57,7 +57,7 @@ def get_args_parser():
     
     parser.add_argument('--beta', default=1, type=float,
                         help='hyperparameter beta')
-    parser.add_argument('--cutmix_prob', default=0, type=float,
+    parser.add_argument('--cut_prob', default=0, type=float,
                         help='cutmix probability')
     
     args = parser.parse_args()
@@ -77,10 +77,10 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         target = target.cuda()
 
         r = np.random.rand(1)
-        if args.beta > 0 and r < args.cutmix_prob:
+        if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
             # pdb.set_trace()
-            lam = np.random.beta(1, 1) / 2 
+            lam = np.random.beta(args.beta, args.beta) / 2 
             rand_index = torch.randperm(input.size()[0]).cuda()
             target_a = target
             target_b = target[rand_index]
@@ -103,13 +103,11 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             output = net(input)
             loss = criterion(output, target)
             
-        input_data = wandb.Table(columns=['Image'])
-        if epoch == 0 and i < 1:
-            for num in range(10):
-                image = wandb.Image(make_grid(input[num]))
-                input_data.add_data(image)
-            wandb.log({'input': input_data})
-
+        input_data = wandb.Table(columns=['Image', 'lam'])
+        if epoch == 0 and i < 5:
+                image = wandb.Image(make_grid(input[0]))
+                input_data.add_data(image, lam)
+                
         optimizer.zero_grad()
         loss.backward()
         
@@ -125,6 +123,9 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     
         if i % args.log_frequency == 0:
             print("@Acc: {:.3f}, @Acc5: {:.3f}, @Loss: {:.3f}".format(acc, acc5, loss.item()))
+            
+    # push the input image
+    wandb.log({'input': input_data})
     
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
     
@@ -165,7 +166,8 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         'lr_scheduler': args.lr_scheduler,
         'optimizer': args.optimizer,
         'learning_rate': args.learning_rate,
-        
+        'beta': args.beta,
+        'cut_prob': args.cut_prob, 
     }
 
     for epoch in range(1, args.epochs):
