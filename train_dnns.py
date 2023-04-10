@@ -1,7 +1,7 @@
 import torch
 from datasets import *
 from models import build_neural_network
-from datasets import DatasetGenerator
+from datasets.dataset import DatasetGenerator
 from utils import *
 from criterion import get_criterion
 from torchvision import transforms
@@ -23,15 +23,15 @@ def get_args_parser():
 
     # system parameters
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--log_frequency', type=int, default=40)
+    parser.add_argument('--log_frequency', type=int, default=50)
 
     # data parameters 
     parser.add_argument('--batch_size', type=int, default=256, ) 
-    parser.add_argument('--n_workers', type=int, default=0)
+    parser.add_argument('--n_workers', type=int, default=4)
     
     # neural network parameters
     parser.add_argument('--arch', type=str, default='resnet18')
-    parser.add_argument('--load', type=str, default='state_dict')
+    parser.add_argument('--load', type=str, default=None)
     parser.add_argument('--save', type=str, default=None)
     
     # training parameters 
@@ -168,6 +168,7 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         'learning_rate': args.learning_rate,
         'beta': args.beta,
         'cut_prob': args.cut_prob, 
+        'epochs': args.epochs,
     }
 
     for epoch in range(1, args.epochs):
@@ -184,7 +185,9 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
             adjust_learning_rate(optimizer, alpha_plan[epoch])
         else:
             lr_scheduler.step()
-        save_model(args.save, net, optimizer, args)
+            
+        if args.save != None:
+            save_model(args.save, net, optimizer, args)
         
     code = wandb.Artifact('python', type='code')
     code.add_file('train_dnns.py')
@@ -211,7 +214,8 @@ def train_dnns(args):
     net = build_neural_network(args.arch)
     net.to(device)
     optimizer = build_optimizer(args.optimizer, net, args.learning_rate, args)
-    load_model(args.load, net, optimizer)
+    if args.load != None:
+        load_model(args.load, net, optimizer)
     
     # create optimizer 
     criterion = get_criterion(args.criterion, args.num_classes, args.confidence)
