@@ -26,7 +26,7 @@ def get_args_parser():
     parser.add_argument('--log_frequency', type=int, default=50)
 
     # data parameters 
-    parser.add_argument('--batch_size', type=int, default=256, ) 
+    parser.add_argument('--batch_size', type=int, default=128, ) 
     parser.add_argument('--n_workers', type=int, default=4)
     
     # neural network parameters
@@ -36,7 +36,7 @@ def get_args_parser():
     
     # training parameters 
     parser.add_argument('--criterion', type=str, default='crossentropyloss')
-    parser.add_argument('--epochs', type=int, default=100)
+    parser.add_argument('--epochs', type=int, default=200)
     parser.add_argument('--num_classes', type=int ,default=10)
     parser.add_argument('--clip_grad', type=float, default=None)
     parser.add_argument('--confidence', type=float, default=0)
@@ -99,7 +99,8 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
             # pdb.set_trace()
-            lam = np.random.uniform(0, args.beta)
+            # lam = np.random.uniform(0, args.beta)
+            lam = 0.3
             
             rand_index = torch.randperm(input.size()[0]).cuda()
             target_a = target
@@ -148,7 +149,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         wandb.log({'input image': input_data})
     # push the input image
     # pdb.set_trace()
-    args.beta = beta_t[epoch]
+    # args.beta = beta_t[epoch]
     
     
     
@@ -178,7 +179,7 @@ def evaluate(net, criterion, eval_loader, args):
 import datetime
 def train_net_for_classification(net, optimizer, criterion, train_loader, eval_loader, lr_scheduler, args):
     print("Training network for classification")
-    alpha_plan = [0.01] * 60 + [0.001] * 40
+    alpha_plan = [0.1] * 80 + [0.01] * 40 + [0.005] * 40 + [0.001] * 40
     
     nowtime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     config = {
