@@ -78,6 +78,21 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         target = target.cuda()
 
         r = np.random.rand(1)
+        
+        # if args.beta > 0 and r < args.cutmix_prob:
+        #     # generate mixed sample
+        #     lam = np.random.beta(args.beta, args.beta)
+        #     rand_index = torch.randperm(input.size()[0]).cuda()
+        #     target_a = target
+        #     target_b = target[rand_index]
+        #     bbx1, bby1, bbx2, bby2 = rand_bbox(input.size(), lam)
+        #     input[:, :, bbx1:bbx2, bby1:bby2] = input[rand_index, :, bbx1:bbx2, bby1:bby2]
+        #     # adjust lambda to exactly match pixel ratio
+        #     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
+        #     # compute output
+        #     output = model(input)
+        #     loss = criterion(output, target_a) * lam + criterion(output, target_b) * (1. - lam)
+        
         if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
             # pdb.set_trace()
@@ -92,7 +107,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             n_channels = 3
             
             rand = torch.rand(height, width)
-            masks = (rand < lam).long().cuda()
+            masks = (rand < lam).float().cuda()
             
             input[:, :] =  input[:, :] * (1 - masks) # + input[rand_index, :]  * masks 
             
