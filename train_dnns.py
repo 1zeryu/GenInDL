@@ -63,7 +63,7 @@ def get_args_parser():
     args = parser.parse_args()
     return args
 
-beta_t = [1] * 40 + [0.5] * 60
+beta_t = np.linspace(0.8, 0.2, 100)
 from torchvision.utils import make_grid
 def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     # metrics
@@ -71,6 +71,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     acc5_meter = AverageMeter()
     loss_meter = AverageMeter()
     
+    input_data = wandb.Table(columns=['Image', 'lam'])
     # train
     net.train()
     for i, (input, target) in enumerate(train_loader):
@@ -79,6 +80,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
 
         r = np.random.rand(1)
         
+                
         # if args.beta > 0 and r < args.cutmix_prob:
         #     # generate mixed sample
         #     lam = np.random.beta(args.beta, args.beta)
@@ -92,6 +94,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         #     # compute output
         #     output = model(input)
         #     loss = criterion(output, target_a) * lam + criterion(output, target_b) * (1. - lam)
+       
         
         if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
@@ -107,12 +110,13 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             n_channels = 3
             
             rand = torch.rand(height, width)
-            masks = (rand < lam).float().cuda()
+            masks = (rand < lam).float().cuda() 
+            masks *= 0.5
             
-            input[:, :] =  input[:, :] * (1 - masks) # + input[rand_index, :]  * masks 
+            input[:, :] =  input[:, :] * (1 - masks) + input[rand_index, :]  * masks 
             
             output = net(input)
-            loss = criterion(output, target_a) 
+            loss = criterion(output, target_a) * (1 - lam) + criterion(output, target_b) * lam
             
         
         else:
@@ -122,7 +126,6 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             loss = criterion(output, target)
             
         if epoch == 1 and i < 5:
-            input_data = wandb.Table(columns=['Image', 'lam'])
             image = wandb.Image(make_grid(input, 16))
             input_data.add_data(image, lam)            
                 
@@ -141,13 +144,13 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     
         if i % args.log_frequency == 0:
             print("@Acc: {:.3f}, @Acc5: {:.3f}, @Loss: {:.3f}".format(acc, acc5, loss.item()))
-            
+    if epoch == 1:
+        wandb.log({'input image': input_data})
     # push the input image
     # pdb.set_trace()
     args.beta = beta_t[epoch]
     
-    if epoch == 1:
-        wandb.log(input_data)
+    
     
     return acc_meter.avg, acc5_meter.avg, loss_meter.avg
     
@@ -178,8 +181,7 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
     alpha_plan = [0.01] * 60 + [0.001] * 40
     
     nowtime = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    run = wandb.init(project='sparsemix', name=nowtime, notes=args.notes, save_code=True)
-    wandb.config = {
+    config = {
         'batch_size': args.batch_size,
         'arch': args.arch,
         'load': args.load,
@@ -192,6 +194,8 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
         'cut_prob': args.cut_prob, 
         'epochs': args.epochs,
     }
+    run = wandb.init(project='sparsemix', config=config, name=nowtime, notes=args.notes, save_code=True)
+    
 
     for epoch in range(1, args.epochs):
         train_acc, train_acc5, train_loss = train_one_epoch(net, optimizer, criterion, train_loader, args, epoch)
