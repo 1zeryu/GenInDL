@@ -9,7 +9,7 @@ import numpy as np
 import argparse
 from torch.nn.utils import clip_grad_norm_
 
-# os.environ["WANDB_MODE"] = "disabled"
+os.environ["WANDB_MODE"] = "offline"
 # os.environ["WANDB_SILENT"] = "true"
 os.environ['WANDB_API_KEY'] = 'ec5d114180c22f7ec57e35cf5d7370f4c6ffe839'
 import wandb
@@ -63,7 +63,7 @@ def get_args_parser():
     args = parser.parse_args()
     return args
 
-beta_t = np.linspace(0.8, 0.2, 100)
+beta_t = np.linspace(0.5, 0.3, 100)
 from torchvision.utils import make_grid
 def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     # metrics
@@ -81,7 +81,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         r = np.random.rand(1)
         
                 
-        # if args.beta > 0 and r < args.cutmix_prob:
+        # if args.beta > 0 and r < args.cut_prob:
         #     # generate mixed sample
         #     lam = np.random.beta(args.beta, args.beta)
         #     rand_index = torch.randperm(input.size()[0]).cuda()
@@ -92,15 +92,15 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         #     # adjust lambda to exactly match pixel ratio
         #     lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (input.size()[-1] * input.size()[-2]))
         #     # compute output
-        #     output = model(input)
+        #     output = net(input)
         #     loss = criterion(output, target_a) * lam + criterion(output, target_b) * (1. - lam)
        
         
         if args.beta > 0 and r < args.cut_prob:
             # generate mixed sample
             # pdb.set_trace()
-            # lam = np.random.uniform(0, args.beta)
-            lam = 0.3
+            lam = np.random.uniform(0.2, args.beta)
+            # lam = 0.3
             
             rand_index = torch.randperm(input.size()[0]).cuda()
             target_a = target
@@ -149,7 +149,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         wandb.log({'input image': input_data})
     # push the input image
     # pdb.set_trace()
-    # args.beta = beta_t[epoch]
+    args.beta = beta_t[epoch]
     
     
     
