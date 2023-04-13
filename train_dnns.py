@@ -118,7 +118,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             input[:, :] =  input[:, :] * (1 - masks) + input[rand_index, :]  * masks 
             
             output = net(input)
-            loss = criterion(output, target_a) * 0.8 + criterion(output, target_b) * 0.2
+            loss = criterion(output, target_a) * 0.6 + criterion(output, target_b) * 0.4
             
         
         else:
