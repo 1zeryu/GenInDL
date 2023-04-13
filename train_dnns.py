@@ -8,8 +8,9 @@ from torchvision import transforms
 import numpy as np
 import argparse
 from torch.nn.utils import clip_grad_norm_
+from torch import nn
 
-os.environ["WANDB_MODE"] = "offline"
+# os.environ["WANDB_MODE"] = "offline"
 # os.environ["WANDB_SILENT"] = "true"
 os.environ['WANDB_API_KEY'] = 'ec5d114180c22f7ec57e35cf5d7370f4c6ffe839'
 import wandb
@@ -63,7 +64,7 @@ def get_args_parser():
     args = parser.parse_args()
     return args
 
-beta_t = np.linspace(0.5, 0.3, 100)
+beta_t = np.linspace(0.5, 0.3, 200)
 from torchvision.utils import make_grid
 def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
     # metrics
@@ -112,12 +113,12 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             
             rand = torch.rand(height, width)
             masks = (rand < lam).float().cuda() 
-            masks *= 0.5
+            # masks *= 0.5
             
             input[:, :] =  input[:, :] * (1 - masks) + input[rand_index, :]  * masks 
             
             output = net(input)
-            loss = criterion(output, target_a) * (1 - lam) + criterion(output, target_b) * lam
+            loss = criterion(output, target_a) * 0.8 + criterion(output, target_b) * 0.2
             
         
         else:
@@ -149,7 +150,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         wandb.log({'input image': input_data})
     # push the input image
     # pdb.set_trace()
-    args.beta = beta_t[epoch]
+    # args.beta = beta_t[epoch]
     
     
     
@@ -240,6 +241,7 @@ def train_dnns(args):
     # building the network
     net = build_neural_network(args.arch)
     net.to(device)
+    net = nn.DataParallel(net, device_ids=[0, 1])
     optimizer = build_optimizer(args.optimizer, net, args.learning_rate, args)
     if args.load != None:
         load_model(args.load, net, optimizer)
