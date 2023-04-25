@@ -60,6 +60,7 @@ def get_args_parser():
                         help='hyperparameter beta')
     parser.add_argument('--cut_prob', default=0, type=float,
                         help='cutmix probability')
+    parser.add_argument('--mode',type=str,default='normal', help="normal, cutout, cutmix")
     
     args = parser.parse_args()
     return args
@@ -97,7 +98,7 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
         #     loss = criterion(output, target_a) * lam + criterion(output, target_b) * (1. - lam)
        
         
-        if args.beta > 0 and r < args.cut_prob:
+        if args.beta > 0 and r < args.cut_prob and args.mode == 'cutmix':
             # generate mixed sample
             # pdb.set_trace()
             lam = np.random.uniform(0.2, args.beta)
@@ -119,7 +120,17 @@ def train_one_epoch(net, optimizer, criterion, train_loader, args, epoch):
             
             output = net(input)
             loss = criterion(output, target_a) * 0.6 + criterion(output, target_b) * 0.4
-            
+        
+        elif r < args.cut_prob and args.mode == 'cutout':
+            # generate mixed sample
+            lam = np.random.beta(args.beta, args.beta)
+            target_a = target
+            bbx1, bby1, bbx2, bby2 = rand_bbox(input.size(), lam)
+            input[:, :, bbx1:bbx2, bby1:bby2] = 0
+            # adjust lambda to exactly match pixel ratio
+            # compute output
+            output = net(input)
+            loss = criterion(output, target_a)
         
         else:
             # compute output
@@ -198,7 +209,7 @@ def train_net_for_classification(net, optimizer, criterion, train_loader, eval_l
     }
     run = wandb.init(project='sparsemix', config=config, name=nowtime, notes=args.notes, save_code=True)
     
-
+    
     for epoch in range(1, args.epochs):
         train_acc, train_acc5, train_loss = train_one_epoch(net, optimizer, criterion, train_loader, args, epoch)
         test_acc, test_acc5, test_loss = evaluate(net, criterion, eval_loader, args)
