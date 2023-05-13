@@ -69,6 +69,11 @@ transform_options = {
         "test_transform": [transforms.Resize(256),
                            transforms.CenterCrop(224),
                            transforms.ToTensor()]},
+    "64*64": {
+        "train_transform": [transforms.Resize((64,64)),
+                            transforms.ToTensor()],
+        "test_transform": [transforms.Resize((64,64)),
+                           transforms.ToTensor()]},
     }
 
 dataset_options = {
